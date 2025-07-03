@@ -43,17 +43,30 @@ def get_jobs():
     """API endpoint to retrieve Dremio jobs."""
     try:
         limit = request.args.get('limit', 50, type=int)
-        jobs = dremio_client.get_jobs(limit=limit)
-        
-        return jsonify({
-            'status': 'success',
-            'jobs': jobs,
-            'count': len(jobs)
-        })
+        result = dremio_client.get_jobs(limit=limit)
+
+        if result['success']:
+            return jsonify({
+                'status': 'success',
+                'jobs': result['jobs'],
+                'count': result['count'],
+                'message': result['message']
+            })
+        else:
+            # Return detailed error information
+            return jsonify({
+                'status': 'error',
+                'message': result['message'],
+                'error_type': result.get('error_type'),
+                'details': result.get('details'),
+                'suggestions': result.get('auth_details', {}).get('suggestions', [])
+            }), 400
+
     except Exception as e:
         return jsonify({
             'status': 'error',
-            'message': f'Failed to retrieve jobs: {str(e)}'
+            'message': f'Unexpected error: {str(e)}',
+            'error_type': 'unexpected_error'
         }), 500
 
 

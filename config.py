@@ -21,23 +21,33 @@ class Config:
     DREMIO_USERNAME = os.environ.get('DREMIO_USERNAME')
     DREMIO_PASSWORD = os.environ.get('DREMIO_PASSWORD')
     DREMIO_PROJECT_ID = os.environ.get('DREMIO_PROJECT_ID')
+
+    # Dremio Cloud Personal Access Token (preferred for Dremio Cloud)
+    DREMIO_PAT = os.environ.get('DREMIO_PAT')
+
+    # SSL/TLS Configuration
+    DREMIO_SSL_VERIFY = os.environ.get('DREMIO_SSL_VERIFY', 'true').lower() == 'true'
+    DREMIO_SSL_CERT_PATH = os.environ.get('DREMIO_SSL_CERT_PATH')  # Optional custom cert path
     
     @classmethod
     def validate_dremio_config(cls):
         """Validate that all required Dremio configuration is present."""
-        required_vars = [
-            'DREMIO_CLOUD_URL',
-            'DREMIO_USERNAME', 
-            'DREMIO_PASSWORD',
-            'DREMIO_PROJECT_ID'
-        ]
-        
-        missing_vars = []
-        for var in required_vars:
-            if not getattr(cls, var):
-                missing_vars.append(var)
-        
-        if missing_vars:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
-        
+        # Check for required base configuration
+        if not cls.DREMIO_CLOUD_URL:
+            raise ValueError("Missing required environment variable: DREMIO_CLOUD_URL")
+
+        if not cls.DREMIO_PROJECT_ID:
+            raise ValueError("Missing required environment variable: DREMIO_PROJECT_ID")
+
+        # Check authentication method - either PAT or username/password
+        has_pat = bool(cls.DREMIO_PAT)
+        has_username_password = bool(cls.DREMIO_USERNAME and cls.DREMIO_PASSWORD)
+
+        if not has_pat and not has_username_password:
+            raise ValueError(
+                "Missing authentication credentials. Please provide either:\n"
+                "  - DREMIO_PAT (Personal Access Token - recommended for Dremio Cloud)\n"
+                "  - DREMIO_USERNAME and DREMIO_PASSWORD (for on-premise or legacy)"
+            )
+
         return True

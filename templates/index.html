@@ -54,18 +54,74 @@
             const statusDiv = document.getElementById('connection-status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML = '<p class="loading">Testing connection...</p>';
-            
+
             try {
                 const response = await fetch('/api/test-connection');
                 const result = await response.json();
-                
+
                 if (result.status === 'success') {
-                    statusDiv.innerHTML = `<p class="success">✓ ${result.message}</p>`;
+                    let successHtml = `<div class="success">
+                        <h4>✓ ${result.message}</h4>
+                        <div class="connection-details">
+                            <p><strong>Project ID:</strong> ${result.details.project_id}</p>
+                            <p><strong>Jobs Found:</strong> ${result.details.jobs_count}</p>
+                            <p><strong>Steps Completed:</strong> ${result.steps_completed.join(', ')}</p>
+                        </div>
+                    </div>`;
+                    statusDiv.innerHTML = successHtml;
                 } else {
-                    statusDiv.innerHTML = `<p class="error">✗ ${result.message}</p>`;
+                    let errorHtml = `<div class="error">
+                        <h4>✗ Connection Failed</h4>
+                        <p><strong>Step:</strong> ${result.step}</p>
+                        <p><strong>Error:</strong> ${result.message}</p>`;
+
+                    if (result.details) {
+                        errorHtml += '<div class="error-details"><h5>Details:</h5>';
+
+                        if (result.details.current_config) {
+                            errorHtml += '<p><strong>Current Configuration:</strong></p><ul>';
+                            for (const [key, value] of Object.entries(result.details.current_config)) {
+                                errorHtml += `<li>${key}: ${value}</li>`;
+                            }
+                            errorHtml += '</ul>';
+                        }
+
+                        if (result.details.error_type) {
+                            errorHtml += `<p><strong>Error Type:</strong> ${result.details.error_type}</p>`;
+                        }
+
+                        if (result.details.status_code) {
+                            errorHtml += `<p><strong>HTTP Status:</strong> ${result.details.status_code}</p>`;
+                        }
+
+                        errorHtml += '</div>';
+                    }
+
+                    if (result.suggestions && result.suggestions.length > 0) {
+                        errorHtml += '<div class="suggestions"><h5>Suggestions:</h5><ul>';
+                        result.suggestions.forEach(suggestion => {
+                            errorHtml += `<li>${suggestion}</li>`;
+                        });
+                        errorHtml += '</ul></div>';
+                    }
+
+                    errorHtml += '</div>';
+                    statusDiv.innerHTML = errorHtml;
                 }
             } catch (error) {
-                statusDiv.innerHTML = `<p class="error">✗ Connection test failed: ${error.message}</p>`;
+                statusDiv.innerHTML = `<div class="error">
+                    <h4>✗ Connection Test Failed</h4>
+                    <p><strong>Network Error:</strong> ${error.message}</p>
+                    <div class="suggestions">
+                        <h5>Suggestions:</h5>
+                        <ul>
+                            <li>Check if the server is running</li>
+                            <li>Verify your network connection</li>
+                            <li>Check browser console for more details</li>
+                        </ul>
+                    </div>
+                </div>`;
+                console.error('Connection test error:', error);
             }
         }
     </script>

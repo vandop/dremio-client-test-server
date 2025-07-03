@@ -68,11 +68,20 @@
                 if (result.status === 'success') {
                     displayJobs(result.jobs, result.count);
                 } else {
-                    showError(result.message);
+                    showError(result);
                 }
             } catch (error) {
                 loading.style.display = 'none';
-                showError(`Failed to load jobs: ${error.message}`);
+                showError({
+                    message: `Network error: ${error.message}`,
+                    error_type: 'network_error',
+                    suggestions: [
+                        'Check if the server is running',
+                        'Verify your network connection',
+                        'Check browser console for more details'
+                    ]
+                });
+                console.error('Jobs loading error:', error);
             }
         }
 
@@ -139,9 +148,50 @@
             container.innerHTML = html;
         }
 
-        function showError(message) {
+        function showError(result) {
             const errorDiv = document.getElementById('error-message');
-            errorDiv.innerHTML = `<p>Error: ${message}</p>`;
+
+            let errorHtml = `<div class="error-details">
+                <h4>Failed to Load Jobs</h4>
+                <p><strong>Error:</strong> ${result.message}</p>`;
+
+            if (result.error_type) {
+                errorHtml += `<p><strong>Error Type:</strong> ${result.error_type}</p>`;
+            }
+
+            if (result.details) {
+                errorHtml += '<div class="technical-details"><h5>Technical Details:</h5>';
+
+                if (result.details.status_code) {
+                    errorHtml += `<p><strong>HTTP Status:</strong> ${result.details.status_code}</p>`;
+                }
+
+                if (result.details.auth_details) {
+                    errorHtml += `<p><strong>Authentication Issue:</strong> ${result.details.auth_details.message}</p>`;
+                }
+
+                errorHtml += '</div>';
+            }
+
+            if (result.suggestions && result.suggestions.length > 0) {
+                errorHtml += '<div class="suggestions"><h5>Suggestions:</h5><ul>';
+                result.suggestions.forEach(suggestion => {
+                    errorHtml += `<li>${suggestion}</li>`;
+                });
+                errorHtml += '</ul></div>';
+            }
+
+            errorHtml += `<div class="troubleshooting">
+                <h5>Troubleshooting Steps:</h5>
+                <ol>
+                    <li>Go back to the <a href="/">main page</a> and test your connection</li>
+                    <li>Check your .env file configuration</li>
+                    <li>Verify your Dremio Cloud credentials</li>
+                    <li>Check the browser console for additional errors</li>
+                </ol>
+            </div></div>`;
+
+            errorDiv.innerHTML = errorHtml;
             errorDiv.style.display = 'block';
         }
 

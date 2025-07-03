@@ -3,86 +3,471 @@ Dremio Cloud API client for connecting and retrieving job information.
 """
 import requests
 import json
+import logging
+import ssl
+import urllib3
 from typing import Dict, List, Optional
 from config import Config
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Disable SSL warnings for development (can be configured)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class DremioClient:
     """Client for interacting with Dremio Cloud API."""
-    
+
     def __init__(self):
         """Initialize the Dremio client with configuration."""
-        self.base_url = Config.DREMIO_CLOUD_URL
+        self.base_url = self._normalize_base_url(Config.DREMIO_CLOUD_URL)
         self.username = Config.DREMIO_USERNAME
         self.password = Config.DREMIO_PASSWORD
         self.project_id = Config.DREMIO_PROJECT_ID
+        self.pat = Config.DREMIO_PAT
         self.token = None
+
+        # Initialize session with SSL/TLS configuration
         self.session = requests.Session()
+        self._configure_session()
+
+        # If we have a PAT, set it up immediately
+        if self.pat:
+            self._setup_pat_auth()
+
+    def _normalize_base_url(self, url: str) -> str:
+        """
+        Normalize the base URL to ensure it points to the API endpoint.
+
+        Args:
+            url: The original URL from configuration
+
+        Returns:
+            Normalized API URL
+        """
+        if not url:
+            return url
+
+        # Remove trailing slash
+        url = url.rstrip('/')
+
+        # Common URL corrections for Dremio Cloud
+        url_corrections = {
+            'https://app.dremio.cloud': 'https://api.dremio.cloud',
+            'https://app.eu.dremio.cloud': 'https://api.eu.dremio.cloud',
+            'http://app.dremio.cloud': 'https://api.dremio.cloud',  # Force HTTPS
+            'http://api.dremio.cloud': 'https://api.dremio.cloud',  # Force HTTPS
+        }
+
+        # Apply corrections
+        if url in url_corrections:
+            corrected_url = url_corrections[url]
+            logger.info(f"🔧 URL auto-corrected: {url} → {corrected_url}")
+            return corrected_url
+
+        # Check if it's a custom domain that might need API prefix
+        if 'dremio.cloud' in url and not url.startswith('https://api.'):
+            # Extract the domain part and add api prefix
+            if url.startswith('https://'):
+                domain_part = url[8:]  # Remove https://
+                if not domain_part.startswith('api.'):
+                    corrected_url = f"https://api.{domain_part}"
+                    logger.info(f"🔧 URL auto-corrected for API: {url} → {corrected_url}")
+                    return corrected_url
+
+        return url
+
+    def _setup_pat_auth(self):
+        """Set up Personal Access Token authentication."""
+        self.session.headers.update({
+            'Authorization': f'Bearer {self.pat}',
+            'Content-Type': 'application/json'
+        })
+        logger.info("✓ Personal Access Token authentication configured")
+
+    def _configure_session(self):
+        """Configure the requests session with proper SSL/TLS settings and headers."""
+        # Set default headers
+        self.session.headers.update({
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'Dremio-Reporting-Server/1.0'
+        })
+
+        # SSL/TLS Configuration
+        ssl_verify = getattr(Config, 'DREMIO_SSL_VERIFY', True)
+        ssl_cert_path = getattr(Config, 'DREMIO_SSL_CERT_PATH', None)
+
+        if ssl_verify:
+            if ssl_cert_path:
+                # Use custom certificate
+                self.session.verify = ssl_cert_path
+                logger.info(f"✓ SSL verification enabled with custom cert: {ssl_cert_path}")
+            else:
+                # Use system's CA bundle for SSL verification
+                self.session.verify = True
+                logger.info("✓ SSL verification enabled with system CA bundle")
+        else:
+            # Disable SSL verification (not recommended for production)
+            self.session.verify = False
+            logger.warning("⚠ SSL verification disabled - not recommended for production")
+
+        # Set timeout for all requests
+        self.session.timeout = 30
+
+        # Configure SSL context for better compatibility
+        if hasattr(ssl, 'create_default_context'):
+            ssl_context = ssl.create_default_context()
+            # Allow TLS 1.2 and above
+            ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+            # Create adapter with SSL context
+            adapter = requests.adapters.HTTPAdapter(
+                max_retries=requests.adapters.Retry(
+                    total=3,
+                    backoff_factor=0.3,
+                    status_forcelist=[500, 502, 503, 504]
+                )
+            )
+            self.session.mount('https://', adapter)
+            self.session.mount('http://', adapter)
     
-    def authenticate(self) -> bool:
+    def authenticate(self) -> Dict[str, any]:
         """
         Authenticate with Dremio Cloud and obtain access token.
-        
+
         Returns:
-            bool: True if authentication successful, False otherwise
+            Dictionary with authentication status and detailed error information
         """
+        # If we have a PAT, we don't need to authenticate - just test the connection
+        if self.pat:
+            logger.info("Using Personal Access Token authentication")
+            return self._test_pat_auth()
+
+        # Fall back to username/password authentication
+        logger.info("Using username/password authentication")
+        return self._authenticate_with_credentials()
+
+    def _test_pat_auth(self) -> Dict[str, any]:
+        """Test Personal Access Token authentication by making a simple API call."""
         try:
-            auth_url = f"{self.base_url}/apiv2/login"
-            auth_data = {
-                "userName": self.username,
-                "password": self.password
-            }
-            
-            response = self.session.post(auth_url, json=auth_data)
+            # Test the PAT by making a simple API call
+            test_url = f"{self.base_url}/v0/projects"
+
+            logger.info(f"Testing PAT authentication with: {test_url}")
+            response = self.session.get(test_url, timeout=30)
+
+            logger.info(f"PAT test response status: {response.status_code}")
+
+            if response.status_code == 401:
+                return {
+                    'success': False,
+                    'error_type': 'invalid_pat',
+                    'message': 'Personal Access Token is invalid or expired',
+                    'details': 'The PAT was rejected by the server',
+                    'suggestions': [
+                        'Check your DREMIO_PAT value',
+                        'Generate a new Personal Access Token in Dremio Cloud UI',
+                        'Verify the token has not expired',
+                        'Ensure the token has the necessary permissions'
+                    ]
+                }
+            elif response.status_code == 403:
+                return {
+                    'success': False,
+                    'error_type': 'insufficient_permissions',
+                    'message': 'Personal Access Token lacks sufficient permissions',
+                    'details': 'The PAT is valid but cannot access the required resources',
+                    'suggestions': [
+                        'Check if your user has access to the project',
+                        'Verify the PAT has the necessary scopes',
+                        'Contact your Dremio administrator for permissions'
+                    ]
+                }
+
             response.raise_for_status()
-            
-            auth_result = response.json()
-            self.token = auth_result.get('token')
-            
-            if self.token:
-                # Set authorization header for future requests
-                self.session.headers.update({
-                    'Authorization': f'_dremio{self.token}',
-                    'Content-Type': 'application/json'
-                })
-                return True
-            
-            return False
-            
+
+            logger.info("✓ Personal Access Token authentication successful")
+            return {
+                'success': True,
+                'message': 'Personal Access Token authentication successful',
+                'auth_method': 'pat'
+            }
+
         except requests.exceptions.RequestException as e:
-            print(f"Authentication failed: {e}")
-            return False
+            logger.error(f"PAT authentication test failed: {e}")
+            return {
+                'success': False,
+                'error_type': 'pat_test_failed',
+                'message': f'Failed to test Personal Access Token: {str(e)}',
+                'details': f'Exception type: {type(e).__name__}',
+                'suggestions': [
+                    'Check your internet connection',
+                    'Verify DREMIO_CLOUD_URL is correct',
+                    'Ensure your PAT is valid and not expired'
+                ]
+            }
+
+    def _authenticate_with_credentials(self) -> Dict[str, any]:
+        """Authenticate using username and password (legacy method)."""
+        # Try multiple authentication endpoints
+        auth_endpoints = [
+            "/v0/login",          # Dremio Cloud API v0 endpoint
+            "/api/v3/login",      # Newer API endpoint
+            "/apiv2/login",       # Legacy endpoint
+            "/login"              # Basic endpoint
+        ]
+
+        for endpoint in auth_endpoints:
+            try:
+                auth_url = f"{self.base_url.rstrip('/')}{endpoint}"
+                auth_data = {
+                    "userName": self.username,
+                    "password": self.password
+                }
+
+                logger.info(f"Attempting authentication to: {auth_url}")
+                logger.info(f"Username: {self.username}")
+                logger.info(f"SSL Verify: {self.session.verify}")
+
+                # Make the authentication request
+                response = self.session.post(
+                    auth_url,
+                    json=auth_data,
+                    timeout=30,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                )
+
+                logger.info(f"Authentication response status: {response.status_code}")
+                logger.info(f"Response headers: {dict(response.headers)}")
+
+                # Check for specific HTTP errors
+                if response.status_code == 401:
+                    logger.warning(f"401 Unauthorized for endpoint {endpoint}, trying next...")
+                    continue  # Try next endpoint
+                elif response.status_code == 404:
+                    logger.warning(f"404 Not Found for endpoint {endpoint}, trying next...")
+                    continue  # Try next endpoint
+                elif response.status_code == 405:
+                    logger.warning(f"405 Method Not Allowed for endpoint {endpoint}, trying next...")
+                    continue  # Try next endpoint
+
+                # If we get here, we have a response (might be successful or other error)
+                response.raise_for_status()
+
+                try:
+                    auth_result = response.json()
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON response from {endpoint}: {e}")
+                    logger.info(f"Response content preview: {response.text[:200]}...")
+                    continue  # Try next endpoint
+
+                # Check if we got a token
+                self.token = auth_result.get('token')
+
+                if self.token:
+                    # Set authorization header for future requests
+                    self.session.headers.update({
+                        'Authorization': f'_dremio{self.token}',
+                        'Content-Type': 'application/json'
+                    })
+                    logger.info(f"✓ Authentication successful using endpoint: {endpoint}")
+                    return {
+                        'success': True,
+                        'message': f'Authentication successful using {endpoint}',
+                        'endpoint_used': endpoint,
+                        'token_length': len(self.token)
+                    }
+                else:
+                    logger.warning(f"No token in response from {endpoint}: {list(auth_result.keys())}")
+                    continue  # Try next endpoint
+
+            except requests.exceptions.SSLError as e:
+                logger.error(f"SSL Error for {endpoint}: {e}")
+                if endpoint == auth_endpoints[-1]:  # Last endpoint
+                    return {
+                        'success': False,
+                        'error_type': 'ssl_error',
+                        'message': f'SSL/TLS connection failed: {str(e)}',
+                        'details': 'SSL certificate verification failed',
+                        'suggestions': [
+                            'Check if your Dremio Cloud URL is correct',
+                            'Verify SSL certificates are valid',
+                            'Try setting DREMIO_SSL_VERIFY=false in .env for testing (not recommended for production)',
+                            'Contact your network administrator about SSL/TLS issues'
+                        ]
+                    }
+                continue  # Try next endpoint
+
+            except requests.exceptions.ConnectionError as e:
+                logger.error(f"Connection Error for {endpoint}: {e}")
+                if endpoint == auth_endpoints[-1]:  # Last endpoint
+                    return {
+                        'success': False,
+                        'error_type': 'connection',
+                        'message': f'Connection failed to {self.base_url}',
+                        'details': str(e),
+                        'suggestions': [
+                            'Check your internet connection',
+                            'Verify DREMIO_CLOUD_URL is correct and accessible',
+                            'Try accessing the URL in your browser',
+                            'Check if there are firewall restrictions'
+                        ]
+                    }
+                continue  # Try next endpoint
+
+            except requests.exceptions.Timeout as e:
+                logger.error(f"Timeout for {endpoint}: {e}")
+                if endpoint == auth_endpoints[-1]:  # Last endpoint
+                    return {
+                        'success': False,
+                        'error_type': 'timeout',
+                        'message': 'Request timed out',
+                        'details': 'The Dremio server took too long to respond',
+                        'suggestions': [
+                            'Check your internet connection speed',
+                            'Try again later - the server might be busy',
+                            'Contact your Dremio administrator'
+                        ]
+                    }
+                continue  # Try next endpoint
+
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Request Error for {endpoint}: {e}")
+                if endpoint == auth_endpoints[-1]:  # Last endpoint
+                    return {
+                        'success': False,
+                        'error_type': 'request_error',
+                        'message': f'Request failed: {str(e)}',
+                        'details': f'Exception type: {type(e).__name__}',
+                        'suggestions': [
+                            'Check all environment variables in your .env file',
+                            'Verify your Dremio Cloud account is active',
+                            'Contact your Dremio administrator if issues persist'
+                        ]
+                    }
+                continue  # Try next endpoint
+
+        # If we get here, all endpoints failed
+        return {
+            'success': False,
+            'error_type': 'all_endpoints_failed',
+            'message': 'Authentication failed on all endpoints',
+            'details': f'Tried endpoints: {auth_endpoints}',
+            'suggestions': [
+                'Verify your DREMIO_CLOUD_URL is correct',
+                'Check your DREMIO_USERNAME and DREMIO_PASSWORD',
+                'Ensure your Dremio Cloud account is active',
+                'Contact your Dremio administrator for API endpoint information'
+            ]
+        }
     
-    def get_jobs(self, limit: int = 100) -> List[Dict]:
+    def get_jobs(self, limit: int = 100) -> Dict[str, any]:
         """
         Retrieve jobs from the Dremio project.
-        
+
         Args:
             limit: Maximum number of jobs to retrieve
-            
+
         Returns:
-            List of job dictionaries
+            Dictionary with jobs data and status information
         """
-        if not self.token:
-            if not self.authenticate():
-                return []
-        
+        # For PAT authentication, we don't need a token
+        if not self.pat and not self.token:
+            auth_result = self.authenticate()
+            if not auth_result['success']:
+                return {
+                    'success': False,
+                    'jobs': [],
+                    'error_type': 'authentication_failed',
+                    'message': 'Authentication failed before retrieving jobs',
+                    'auth_details': auth_result
+                }
+
         try:
-            jobs_url = f"{self.base_url}/api/v3/projects/{self.project_id}/jobs"
+            # Try multiple job endpoints for different Dremio versions
+            jobs_endpoints = [
+                f"/v0/projects/{self.project_id}/jobs",      # Dremio Cloud API v0
+                f"/api/v3/projects/{self.project_id}/jobs",  # API v3
+                f"/projects/{self.project_id}/jobs"          # Basic endpoint
+            ]
+
+            jobs_url = f"{self.base_url}{jobs_endpoints[0]}"  # Start with v0
             params = {
                 'limit': limit,
                 'offset': 0
             }
-            
-            response = self.session.get(jobs_url, params=params)
+
+            logger.info(f"Requesting jobs from: {jobs_url}")
+            logger.info(f"Parameters: {params}")
+
+            response = self.session.get(jobs_url, params=params, timeout=30)
+
+            logger.info(f"Jobs response status: {response.status_code}")
+
+            if response.status_code == 403:
+                error_msg = "Access denied to jobs endpoint"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'jobs': [],
+                    'error_type': 'access_denied',
+                    'status_code': 403,
+                    'message': error_msg,
+                    'details': 'Please check your user permissions for this project'
+                }
+            elif response.status_code == 404:
+                error_msg = f"Project not found: {self.project_id}"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'jobs': [],
+                    'error_type': 'project_not_found',
+                    'status_code': 404,
+                    'message': error_msg,
+                    'details': 'Please check your DREMIO_PROJECT_ID'
+                }
+
             response.raise_for_status()
-            
-            jobs_data = response.json()
-            return jobs_data.get('jobs', [])
-            
+
+            try:
+                jobs_data = response.json()
+            except json.JSONDecodeError as e:
+                error_msg = "Invalid JSON response from jobs endpoint"
+                logger.error(f"{error_msg}: {e}")
+                return {
+                    'success': False,
+                    'jobs': [],
+                    'error_type': 'invalid_response',
+                    'message': error_msg,
+                    'details': f"Response content: {response.text[:200]}..."
+                }
+
+            jobs = jobs_data.get('jobs', [])
+            logger.info(f"✓ Successfully retrieved {len(jobs)} jobs")
+
+            return {
+                'success': True,
+                'jobs': jobs,
+                'count': len(jobs),
+                'message': f'Successfully retrieved {len(jobs)} jobs'
+            }
+
         except requests.exceptions.RequestException as e:
-            print(f"Failed to retrieve jobs: {e}")
-            return []
+            error_msg = f"Failed to retrieve jobs: {str(e)}"
+            logger.error(error_msg)
+            return {
+                'success': False,
+                'jobs': [],
+                'error_type': 'request_error',
+                'message': error_msg,
+                'details': f"Exception type: {type(e).__name__}"
+            }
     
     def get_job_details(self, job_id: str) -> Optional[Dict]:
         """
@@ -112,35 +497,133 @@ class DremioClient:
     
     def test_connection(self) -> Dict[str, any]:
         """
-        Test the connection to Dremio Cloud.
-        
+        Test the connection to Dremio Cloud with detailed diagnostics.
+
         Returns:
-            Dictionary with connection status and details
+            Dictionary with connection status and detailed diagnostic information
         """
+        logger.info("=== Starting Dremio Connection Test ===")
+
+        # Step 1: Validate configuration
         try:
             Config.validate_dremio_config()
-            
-            if self.authenticate():
-                # Try to get a small number of jobs to test the connection
-                jobs = self.get_jobs(limit=1)
-                return {
-                    'status': 'success',
-                    'message': 'Successfully connected to Dremio Cloud',
-                    'jobs_accessible': len(jobs) >= 0
-                }
-            else:
-                return {
-                    'status': 'error',
-                    'message': 'Authentication failed'
-                }
-                
+            logger.info("✓ Configuration validation passed")
         except ValueError as e:
+            error_msg = str(e)
+            logger.error(f"✗ Configuration validation failed: {error_msg}")
             return {
                 'status': 'error',
-                'message': str(e)
+                'step': 'configuration',
+                'message': error_msg,
+                'details': {
+                    'current_config': {
+                        'DREMIO_CLOUD_URL': Config.DREMIO_CLOUD_URL or 'NOT SET',
+                        'DREMIO_USERNAME': Config.DREMIO_USERNAME or 'NOT SET',
+                        'DREMIO_PASSWORD': '***' if Config.DREMIO_PASSWORD else 'NOT SET',
+                        'DREMIO_PROJECT_ID': Config.DREMIO_PROJECT_ID or 'NOT SET'
+                    }
+                },
+                'suggestions': [
+                    'Copy .env.example to .env',
+                    'Fill in your Dremio Cloud credentials',
+                    'Make sure all required variables are set'
+                ]
             }
-        except Exception as e:
+
+        # Step 2: Test authentication
+        logger.info("Testing authentication...")
+        auth_result = self.authenticate()
+
+        if not auth_result['success']:
+            logger.error(f"✗ Authentication failed: {auth_result['message']}")
             return {
                 'status': 'error',
-                'message': f'Connection test failed: {str(e)}'
+                'step': 'authentication',
+                'message': f"Authentication failed: {auth_result['message']}",
+                'details': auth_result,
+                'suggestions': self._get_auth_suggestions(auth_result)
             }
+
+        logger.info("✓ Authentication successful")
+
+        # Step 3: Test jobs access
+        logger.info("Testing jobs access...")
+        jobs_result = self.get_jobs(limit=1)
+
+        if not jobs_result['success']:
+            logger.error(f"✗ Jobs access failed: {jobs_result['message']}")
+            return {
+                'status': 'error',
+                'step': 'jobs_access',
+                'message': f"Jobs access failed: {jobs_result['message']}",
+                'details': jobs_result,
+                'suggestions': self._get_jobs_suggestions(jobs_result)
+            }
+
+        logger.info(f"✓ Jobs access successful - found {jobs_result['count']} jobs")
+        logger.info("=== Connection Test Completed Successfully ===")
+
+        return {
+            'status': 'success',
+            'message': 'Successfully connected to Dremio Cloud',
+            'details': {
+                'authentication': 'successful',
+                'jobs_accessible': True,
+                'jobs_count': jobs_result['count'],
+                'project_id': self.project_id,
+                'base_url': self.base_url
+            },
+            'steps_completed': ['configuration', 'authentication', 'jobs_access']
+        }
+
+    def _get_auth_suggestions(self, auth_result: Dict) -> List[str]:
+        """Get suggestions based on authentication error type."""
+        error_type = auth_result.get('error_type', '')
+
+        if error_type == 'connection':
+            return [
+                'Check your internet connection',
+                'Verify DREMIO_CLOUD_URL is correct and accessible',
+                'Try accessing the URL in your browser'
+            ]
+        elif error_type == 'authentication':
+            return [
+                'Double-check your DREMIO_USERNAME and DREMIO_PASSWORD',
+                'Try logging into Dremio Cloud web interface with these credentials',
+                'Check if your account is locked or expired'
+            ]
+        elif error_type == 'endpoint_not_found':
+            return [
+                'Verify your DREMIO_CLOUD_URL is correct',
+                'Make sure the URL includes the protocol (https://)',
+                'Check if your organization name is correct in the URL'
+            ]
+        else:
+            return [
+                'Check all environment variables in your .env file',
+                'Verify your Dremio Cloud account is active',
+                'Contact your Dremio administrator if issues persist'
+            ]
+
+    def _get_jobs_suggestions(self, jobs_result: Dict) -> List[str]:
+        """Get suggestions based on jobs access error type."""
+        error_type = jobs_result.get('error_type', '')
+
+        if error_type == 'access_denied':
+            return [
+                'Check if your user has permissions to view jobs',
+                'Verify you are assigned to the correct project',
+                'Contact your Dremio administrator for access'
+            ]
+        elif error_type == 'project_not_found':
+            return [
+                'Double-check your DREMIO_PROJECT_ID',
+                'Verify the project exists and you have access',
+                'Check the project ID in Dremio Cloud project settings'
+            ]
+        else:
+            return [
+                'Verify your project permissions',
+                'Check if the project is active',
+                'Contact your Dremio administrator if issues persist'
+            ]

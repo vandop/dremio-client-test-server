@@ -86,10 +86,18 @@ def test_get_jobs_api(client):
             'endTime': '2023-01-01T10:01:00Z'
         }
     ]
-    
+
+    # Mock the new return format
+    mock_result = {
+        'success': True,
+        'jobs': mock_jobs,
+        'count': len(mock_jobs),
+        'message': 'Successfully retrieved 1 jobs'
+    }
+
     with patch('dremio_client.DremioClient.get_jobs') as mock_get_jobs:
-        mock_get_jobs.return_value = mock_jobs
-        
+        mock_get_jobs.return_value = mock_result
+
         response = client.get('/api/jobs?limit=10')
         assert response.status_code == 200
         data = response.get_json()

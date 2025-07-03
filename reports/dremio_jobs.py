@@ -23,8 +23,18 @@ class DremioJobsReporter:
         Returns:
             Dictionary containing job summary and statistics
         """
-        jobs = self.client.get_jobs(limit=limit)
-        
+        jobs_result = self.client.get_jobs(limit=limit)
+
+        if not jobs_result['success']:
+            return {
+                'total_jobs': 0,
+                'jobs': [],
+                'statistics': {},
+                'error': jobs_result
+            }
+
+        jobs = jobs_result['jobs']
+
         if not jobs:
             return {
                 'total_jobs': 0,
@@ -107,8 +117,13 @@ class DremioJobsReporter:
         Returns:
             List of recent job dictionaries
         """
-        all_jobs = self.client.get_jobs(limit=limit)
-        
+        jobs_result = self.client.get_jobs(limit=limit)
+
+        if not jobs_result['success']:
+            return []
+
+        all_jobs = jobs_result['jobs']
+
         if not all_jobs:
             return []
         
@@ -138,11 +153,16 @@ class DremioJobsReporter:
         Returns:
             List of failed job dictionaries
         """
-        all_jobs = self.client.get_jobs(limit=limit)
-        
+        jobs_result = self.client.get_jobs(limit=limit)
+
+        if not jobs_result['success']:
+            return []
+
+        all_jobs = jobs_result['jobs']
+
         failed_jobs = [
-            job for job in all_jobs 
+            job for job in all_jobs
             if job.get('jobState', '').upper() in ['FAILED', 'CANCELLED']
         ]
-        
+
         return failed_jobs
