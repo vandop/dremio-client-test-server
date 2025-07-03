@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Query Interface - Dremio Reporting Server</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .query-interface {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .query-editor {
+            width: 100%;
+            min-height: 150px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        
+        .query-controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .query-controls input[type="number"] {
+            width: 100px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .results-container {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        
+        .results-table th,
+        .results-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .results-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        
+        .results-table td {
+            font-family: monospace;
+        }
+        
+        .query-examples {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .example-query {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+            border-left: 3px solid #667eea;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .example-query:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .example-query code {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 SQL Query Interface</h1>
+            <nav>
+                <a href="/" class="btn btn-secondary">← Back to Home</a>
+                <a href="/reports" class="btn btn-secondary">View Reports</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="query-examples">
+                <h3>📝 Example Queries</h3>
+                <p>Click on any example to load it into the editor:</p>
+                
+                <div class="example-query" onclick="loadExample('SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time')">
+                    <strong>Simple Test Query</strong><br>
+                    <code>SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time</code>
+                </div>
+                
+                <div class="example-query" onclick="loadExample('SHOW SCHEMAS')">
+                    <strong>List Available Schemas</strong><br>
+                    <code>SHOW SCHEMAS</code>
+                </div>
+                
+                <div class="example-query" onclick="loadExample('SELECT CURRENT_USER(), CURRENT_TIMESTAMP')">
+                    <strong>Current User and Time</strong><br>
+                    <code>SELECT CURRENT_USER(), CURRENT_TIMESTAMP</code>
+                </div>
+            </div>
+
+            <div class="query-interface">
+                <h3>✏️ SQL Query Editor</h3>
+                <textarea id="queryEditor" class="query-editor" placeholder="Enter your SQL query here...
+
+Example:
+SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time"></textarea>
+                
+                <div class="query-controls">
+                    <button onclick="executeQuery()" class="btn btn-primary">Execute Query</button>
+                    <label>
+                        Limit:
+                        <input type="number" id="limitInput" value="100" min="1" max="10000">
+                    </label>
+                    <button onclick="clearResults()" class="btn btn-secondary">Clear Results</button>
+                </div>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <p>Executing query...</p>
+            </div>
+
+            <div id="error-message" class="error" style="display: none;"></div>
+
+            <div id="results-container" style="display: none;">
+                <div class="results-container">
+                    <div id="results-header" style="padding: 15px; background-color: #f8f9fa; border-bottom: 1px solid #ddd;">
+                        <h4 id="results-title">Query Results</h4>
+                        <p id="results-info"></p>
+                    </div>
+                    <div style="max-height: 500px; overflow: auto;">
+                        <table id="results-table" class="results-table">
+                            <thead id="results-thead"></thead>
+                            <tbody id="results-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function loadExample(sql) {
+            document.getElementById('queryEditor').value = sql;
+        }
+
+        async function executeQuery() {
+            const sql = document.getElementById('queryEditor').value.trim();
+            const limit = parseInt(document.getElementById('limitInput').value);
+            
+            if (!sql) {
+                alert('Please enter a SQL query');
+                return;
+            }
+
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('error-message');
+            const resultsContainer = document.getElementById('results-container');
+
+            // Show loading state
+            loading.style.display = 'block';
+            errorMessage.style.display = 'none';
+            resultsContainer.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sql: sql,
+                        limit: limit
+                    })
+                });
+
+                const result = await response.json();
+                loading.style.display = 'none';
+
+                if (result.status === 'success') {
+                    displayResults(result);
+                } else {
+                    showError(result);
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                showError({
+                    message: `Network error: ${error.message}`,
+                    error_type: 'network_error',
+                    suggestions: [
+                        'Check if the server is running',
+                        'Verify your network connection',
+                        'Check browser console for more details'
+                    ]
+                });
+                console.error('Query execution error:', error);
+            }
+        }
+
+        function displayResults(result) {
+            const resultsContainer = document.getElementById('results-container');
+            const resultsTitle = document.getElementById('results-title');
+            const resultsInfo = document.getElementById('results-info');
+            const thead = document.getElementById('results-thead');
+            const tbody = document.getElementById('results-tbody');
+
+            // Update header
+            resultsTitle.textContent = '✅ Query Results';
+            resultsInfo.innerHTML = `
+                <strong>Rows:</strong> ${result.row_count} | 
+                <strong>Columns:</strong> ${result.columns.length} | 
+                <strong>Method:</strong> ${result.query_method || 'Flight SQL'}
+            `;
+
+            // Clear previous results
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            if (result.data && result.data.length > 0) {
+                // Create header row
+                const headerRow = document.createElement('tr');
+                result.columns.forEach(column => {
+                    const th = document.createElement('th');
+                    th.textContent = column;
+                    th.title = column; // Tooltip for long column names
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+
+                // Create data rows
+                result.data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    result.columns.forEach(column => {
+                        const td = document.createElement('td');
+                        const value = row[column];
+                        td.textContent = value !== null && value !== undefined ? String(value) : 'NULL';
+                        td.title = td.textContent; // Tooltip for long values
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+            } else {
+                // No data
+                const noDataRow = document.createElement('tr');
+                const noDataCell = document.createElement('td');
+                noDataCell.colSpan = result.columns.length || 1;
+                noDataCell.textContent = 'No data returned';
+                noDataCell.style.textAlign = 'center';
+                noDataCell.style.fontStyle = 'italic';
+                noDataRow.appendChild(noDataCell);
+                tbody.appendChild(noDataRow);
+            }
+
+            resultsContainer.style.display = 'block';
+        }
+
+        function showError(result) {
+            const errorDiv = document.getElementById('error-message');
+            
+            let errorHtml = `<div class="error-details">
+                <h4>❌ Query Failed</h4>
+                <p><strong>Error:</strong> ${result.message}</p>`;
+            
+            if (result.error_type) {
+                errorHtml += `<p><strong>Error Type:</strong> ${result.error_type}</p>`;
+            }
+            
+            if (result.query) {
+                errorHtml += `<p><strong>Query:</strong> <code>${result.query}</code></p>`;
+            }
+            
+            if (result.suggestions && result.suggestions.length > 0) {
+                errorHtml += '<div class="suggestions"><h5>Suggestions:</h5><ul>';
+                result.suggestions.forEach(suggestion => {
+                    errorHtml += `<li>${suggestion}</li>`;
+                });
+                errorHtml += '</ul></div>';
+            }
+            
+            errorHtml += '</div>';
+            errorDiv.innerHTML = errorHtml;
+            errorDiv.style.display = 'block';
+        }
+
+        function clearResults() {
+            document.getElementById('results-container').style.display = 'none';
+            document.getElementById('error-message').style.display = 'none';
+        }
+
+        // Allow Ctrl+Enter to execute query
+        document.getElementById('queryEditor').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                executeQuery();
+            }
+        });
+    </script>
+</body>
+</html>

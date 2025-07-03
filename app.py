@@ -3,14 +3,14 @@ Main Flask application for Dremio Reporting Server.
 """
 from flask import Flask, render_template, jsonify, request
 from config import Config
-from dremio_client import DremioClient
+from dremio_hybrid_client import DremioHybridClient
 import os
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Initialize Dremio client
-dremio_client = DremioClient()
+# Initialize Dremio hybrid client (Flight SQL + REST API)
+dremio_client = DremioHybridClient()
 
 
 @app.route('/')
@@ -23,6 +23,12 @@ def index():
 def reports():
     """Reports page showing Dremio jobs."""
     return render_template('reports.html')
+
+
+@app.route('/query')
+def query():
+    """SQL Query interface page."""
+    return render_template('query.html')
 
 
 @app.route('/api/test-connection')
@@ -114,6 +120,84 @@ def get_projects():
                 'message': result['message'],
                 'error_type': result.get('error_type'),
                 'details': result.get('details'),
+                'suggestions': result.get('suggestions', [])
+            }), 400
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Unexpected error: {str(e)}',
+            'error_type': 'unexpected_error'
+        }), 500
+
+
+@app.route('/api/query', methods=['POST'])
+def execute_query():
+    """API endpoint to execute SQL queries using Flight SQL."""
+    try:
+        data = request.get_json()
+        if not data or 'sql' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing SQL query in request body',
+                'error_type': 'missing_sql'
+            }), 400
+
+        sql = data['sql']
+        limit = data.get('limit', 1000)  # Default limit for safety
+
+        # Add limit if not present and query is a SELECT
+        if limit and 'LIMIT' not in sql.upper() and sql.strip().upper().startswith('SELECT'):
+            sql = f"{sql} LIMIT {limit}"
+
+        result = dremio_client.execute_query(sql)
+
+        if result['success']:
+            return jsonify({
+                'status': 'success',
+                'data': result['data'],
+                'row_count': result['row_count'],
+                'columns': result['columns'],
+                'query': result['query'],
+                'message': result['message'],
+                'query_method': 'flight_sql'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result['message'],
+                'error_type': result.get('error_type'),
+                'query': result.get('query'),
+                'suggestions': result.get('suggestions', [])
+            }), 400
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Unexpected error: {str(e)}',
+            'error_type': 'unexpected_error'
+        }), 500
+
+
+@app.route('/api/schemas')
+def get_schemas():
+    """API endpoint to get available schemas using Flight SQL."""
+    try:
+        result = dremio_client.get_schemas()
+
+        if result['success']:
+            return jsonify({
+                'status': 'success',
+                'schemas': result['schemas'],
+                'count': result['count'],
+                'message': result['message'],
+                'query_method': result['query_method']
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result['message'],
+                'error_type': result.get('error_type'),
                 'suggestions': result.get('suggestions', [])
             }), 400
 

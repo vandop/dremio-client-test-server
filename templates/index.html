@@ -20,15 +20,20 @@
                 
                 <div class="features">
                     <div class="feature-card">
-                        <h3>🔗 Dremio Integration</h3>
-                        <p>Connect to Dremio Cloud using PyArrow and REST API</p>
+                        <h3>🔍 SQL Query Interface</h3>
+                        <p>Execute SQL queries directly using PyArrow Flight SQL for high-performance analytics</p>
                     </div>
-                    
+
+                    <div class="feature-card">
+                        <h3>🔗 Hybrid Dremio Integration</h3>
+                        <p>Flight SQL for data queries + REST API for job information and metadata</p>
+                    </div>
+
                     <div class="feature-card">
                         <h3>📊 Job Reports</h3>
                         <p>View and analyze Dremio jobs and their execution details</p>
                     </div>
-                    
+
                     <div class="feature-card">
                         <h3>🐳 DevContainer Ready</h3>
                         <p>Fully configured development environment with all dependencies</p>
@@ -37,9 +42,10 @@
             </div>
 
             <div class="actions">
-                <a href="/reports" class="btn btn-primary">View Dremio Jobs Report</a>
-                <button onclick="testConnection()" class="btn btn-secondary">Test Dremio Connection</button>
-                <button onclick="viewProjects()" class="btn btn-secondary">View Available Projects</button>
+                <a href="/query" class="btn btn-primary">🔍 SQL Query Interface</a>
+                <a href="/reports" class="btn btn-primary">📊 View Dremio Jobs Report</a>
+                <button onclick="testConnection()" class="btn btn-secondary">🔧 Test Dremio Connection</button>
+                <button onclick="viewProjects()" class="btn btn-secondary">📁 View Available Projects</button>
             </div>
 
             <div id="connection-status" class="status-message" style="display: none;"></div>
