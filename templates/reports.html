@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dremio Jobs Report - Dremio Reporting Server</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Dremio Jobs Report</h1>
+            <nav>
+                <a href="/" class="btn btn-secondary">← Back to Home</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="report-controls">
+                <button onclick="loadJobs()" class="btn btn-primary">Load Jobs</button>
+                <select id="limitSelect" onchange="loadJobs()">
+                    <option value="25">25 jobs</option>
+                    <option value="50" selected>50 jobs</option>
+                    <option value="100">100 jobs</option>
+                </select>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <p>Loading jobs from Dremio...</p>
+            </div>
+
+            <div id="error-message" class="error" style="display: none;"></div>
+
+            <div id="jobs-container">
+                <div class="welcome-message">
+                    <h3>Welcome to the Jobs Report</h3>
+                    <p>Click "Load Jobs" to retrieve and display jobs from your Dremio Cloud project.</p>
+                    <p>Make sure your environment variables are configured correctly:</p>
+                    <ul>
+                        <li><code>DREMIO_CLOUD_URL</code></li>
+                        <li><code>DREMIO_USERNAME</code></li>
+                        <li><code>DREMIO_PASSWORD</code></li>
+                        <li><code>DREMIO_PROJECT_ID</code></li>
+                    </ul>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        async function loadJobs() {
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('error-message');
+            const jobsContainer = document.getElementById('jobs-container');
+            const limit = document.getElementById('limitSelect').value;
+
+            // Show loading state
+            loading.style.display = 'block';
+            errorMessage.style.display = 'none';
+            jobsContainer.innerHTML = '';
+
+            try {
+                const response = await fetch(`/api/jobs?limit=${limit}`);
+                const result = await response.json();
+
+                loading.style.display = 'none';
+
+                if (result.status === 'success') {
+                    displayJobs(result.jobs, result.count);
+                } else {
+                    showError(result);
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                showError({
+                    message: `Network error: ${error.message}`,
+                    error_type: 'network_error',
+                    suggestions: [
+                        'Check if the server is running',
+                        'Verify your network connection',
+                        'Check browser console for more details'
+                    ]
+                });
+                console.error('Jobs loading error:', error);
+            }
+        }
+
+        function displayJobs(jobs, count) {
+            const container = document.getElementById('jobs-container');
+            
+            if (jobs.length === 0) {
+                container.innerHTML = `
+                    <div class="no-jobs">
+                        <h3>No jobs found</h3>
+                        <p>No jobs were found in your Dremio project. This could mean:</p>
+                        <ul>
+                            <li>The project is new and has no jobs yet</li>
+                            <li>Your user doesn't have permission to view jobs</li>
+                            <li>There's an issue with the connection</li>
+                        </ul>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="jobs-summary">
+                    <h3>Found ${count} jobs</h3>
+                </div>
+                <div class="jobs-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>Status</th>
+                                <th>Query Type</th>
+                                <th>Start Time</th>
+                                <th>Duration</th>
+                                <th>User</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            jobs.forEach(job => {
+                const startTime = job.startTime ? new Date(job.startTime).toLocaleString() : 'N/A';
+                const duration = job.endTime && job.startTime ? 
+                    `${Math.round((new Date(job.endTime) - new Date(job.startTime)) / 1000)}s` : 'N/A';
+                
+                html += `
+                    <tr class="job-row" onclick="showJobDetails('${job.id}')">
+                        <td class="job-id">${job.id || 'N/A'}</td>
+                        <td class="job-status status-${(job.jobState || 'unknown').toLowerCase()}">${job.jobState || 'Unknown'}</td>
+                        <td>${job.queryType || 'N/A'}</td>
+                        <td>${startTime}</td>
+                        <td>${duration}</td>
+                        <td>${job.user || 'N/A'}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        function showError(result) {
+            const errorDiv = document.getElementById('error-message');
+
+            let errorHtml = `<div class="error-details">
+                <h4>Failed to Load Jobs</h4>
+                <p><strong>Error:</strong> ${result.message}</p>`;
+
+            if (result.error_type) {
+                errorHtml += `<p><strong>Error Type:</strong> ${result.error_type}</p>`;
+            }
+
+            if (result.details) {
+                errorHtml += '<div class="technical-details"><h5>Technical Details:</h5>';
+
+                if (result.details.status_code) {
+                    errorHtml += `<p><strong>HTTP Status:</strong> ${result.details.status_code}</p>`;
+                }
+
+                if (result.details.auth_details) {
+                    errorHtml += `<p><strong>Authentication Issue:</strong> ${result.details.auth_details.message}</p>`;
+                }
+
+                errorHtml += '</div>';
+            }
+
+            if (result.suggestions && result.suggestions.length > 0) {
+                errorHtml += '<div class="suggestions"><h5>Suggestions:</h5><ul>';
+                result.suggestions.forEach(suggestion => {
+                    errorHtml += `<li>${suggestion}</li>`;
+                });
+                errorHtml += '</ul></div>';
+            }
+
+            errorHtml += `<div class="troubleshooting">
+                <h5>Troubleshooting Steps:</h5>
+                <ol>
+                    <li>Go back to the <a href="/">main page</a> and test your connection</li>
+                    <li>Check your .env file configuration</li>
+                    <li>Verify your Dremio Cloud credentials</li>
+                    <li>Check the browser console for additional errors</li>
+                </ol>
+            </div></div>`;
+
+            errorDiv.innerHTML = errorHtml;
+            errorDiv.style.display = 'block';
+        }
+
+        function showJobDetails(jobId) {
+            // This could be expanded to show a modal with job details
+            alert(`Job details for ${jobId} - This feature can be expanded to show detailed job information.`);
+        }
+
+        // Load jobs automatically when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Uncomment the line below to auto-load jobs on page load
+            // loadJobs();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dremio Reporting Server</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Hello World - Dremio Reporting Server</h1>
+            <p class="subtitle">Your gateway to Dremio Cloud analytics and reporting</p>
+        </header>
+
+        <main>
+            <div class="welcome-section">
+                <h2>Welcome!</h2>
+                <p>This is a Flask-based web application ready to connect to Dremio Cloud and generate reports.</p>
+                
+                <div class="features">
+                    <div class="feature-card">
+                        <h3>🔍 SQL Query Interface</h3>
+                        <p>Execute SQL queries directly using PyArrow Flight SQL for high-performance analytics</p>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>🔗 Hybrid Dremio Integration</h3>
+                        <p>Flight SQL for data queries + REST API for job information and metadata</p>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>📊 Job Reports</h3>
+                        <p>View and analyze Dremio jobs and their execution details</p>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>🐳 DevContainer Ready</h3>
+                        <p>Fully configured development environment with all dependencies</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <a href="/query" class="btn btn-primary">🔍 SQL Query Interface</a>
+                <a href="/reports" class="btn btn-primary">📊 View Dremio Jobs Report</a>
+                <button onclick="testConnection()" class="btn btn-secondary">🔧 Test Dremio Connection</button>
+                <button onclick="viewProjects()" class="btn btn-secondary">📁 View Available Projects</button>
+            </div>
+
+            <div id="connection-status" class="status-message" style="display: none;"></div>
+        </main>
+
+        <footer>
+            <p>Built with Flask, PyArrow, and ❤️</p>
+        </footer>
+    </div>
+
+    <script>
+        async function testConnection() {
+            const statusDiv = document.getElementById('connection-status');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = '<p class="loading">Testing connection...</p>';
+
+            try {
+                const response = await fetch('/api/test-connection');
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    let successHtml = `<div class="success">
+                        <h4>✓ ${result.message}</h4>
+                        <div class="connection-details">
+                            <p><strong>Project ID:</strong> ${result.details.project_id}</p>
+                            <p><strong>Jobs Found:</strong> ${result.details.jobs_count}</p>
+                            <p><strong>Steps Completed:</strong> ${result.steps_completed.join(', ')}</p>`;
+
+                    // Add projects information if available
+                    if (result.details.projects) {
+                        const projects = result.details.projects;
+                        successHtml += `
+                            <div class="projects-info">
+                                <h5>📁 Accessible Projects (${projects.total_count})</h5>`;
+
+                        if (projects.total_count > 0) {
+                            successHtml += '<div class="projects-list">';
+                            projects.accessible_projects.forEach(project => {
+                                const currentBadge = project.is_current ? ' <span class="current-project">CURRENT</span>' : '';
+                                const description = project.description ? ` - ${project.description}` : '';
+                                successHtml += `
+                                    <div class="project-item ${project.is_current ? 'current' : ''}">
+                                        <strong>${project.name}</strong>${currentBadge}
+                                        <br><small>ID: ${project.id}${description}</small>
+                                    </div>`;
+                            });
+                            successHtml += '</div>';
+
+                            if (!projects.current_project_found && projects.current_project_id) {
+                                successHtml += `<div class="warning-note">
+                                    ⚠ Your configured project ID (${projects.current_project_id}) was not found in accessible projects.
+                                </div>`;
+                            }
+                        } else {
+                            successHtml += '<p class="no-projects">No projects accessible with current credentials.</p>';
+                        }
+
+                        successHtml += '</div>';
+                    }
+
+                    successHtml += `
+                        </div>
+                    </div>`;
+                    statusDiv.innerHTML = successHtml;
+                } else {
+                    let errorHtml = `<div class="error">
+                        <h4>✗ Connection Failed</h4>
+                        <p><strong>Step:</strong> ${result.step}</p>
+                        <p><strong>Error:</strong> ${result.message}</p>`;
+
+                    if (result.details) {
+                        errorHtml += '<div class="error-details"><h5>Details:</h5>';
+
+                        if (result.details.current_config) {
+                            errorHtml += '<p><strong>Current Configuration:</strong></p><ul>';
+                            for (const [key, value] of Object.entries(result.details.current_config)) {
+                                errorHtml += `<li>${key}: ${value}</li>`;
+                            }
+                            errorHtml += '</ul>';
+                        }
+
+                        if (result.details.error_type) {
+                            errorHtml += `<p><strong>Error Type:</strong> ${result.details.error_type}</p>`;
+                        }
+
+                        if (result.details.status_code) {
+                            errorHtml += `<p><strong>HTTP Status:</strong> ${result.details.status_code}</p>`;
+                        }
+
+                        errorHtml += '</div>';
+                    }
+
+                    if (result.suggestions && result.suggestions.length > 0) {
+                        errorHtml += '<div class="suggestions"><h5>Suggestions:</h5><ul>';
+                        result.suggestions.forEach(suggestion => {
+                            errorHtml += `<li>${suggestion}</li>`;
+                        });
+                        errorHtml += '</ul></div>';
+                    }
+
+                    errorHtml += '</div>';
+                    statusDiv.innerHTML = errorHtml;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">
+                    <h4>✗ Connection Test Failed</h4>
+                    <p><strong>Network Error:</strong> ${error.message}</p>
+                    <div class="suggestions">
+                        <h5>Suggestions:</h5>
+                        <ul>
+                            <li>Check if the server is running</li>
+                            <li>Verify your network connection</li>
+                            <li>Check browser console for more details</li>
+                        </ul>
+                    </div>
+                </div>`;
+                console.error('Connection test error:', error);
+            }
+        }
+
+        async function viewProjects() {
+            const statusDiv = document.getElementById('connection-status');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = '<p class="loading">Loading projects...</p>';
+
+            try {
+                const response = await fetch('/api/projects');
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    let projectsHtml = `<div class="success">
+                        <h4>📁 Available Projects (${result.total_count})</h4>`;
+
+                    if (result.total_count > 0) {
+                        projectsHtml += '<div class="projects-list">';
+                        result.projects.forEach(project => {
+                            const currentBadge = project.is_current ? ' <span class="current-project">CURRENT</span>' : '';
+                            const description = project.description ? ` - ${project.description}` : '';
+                            const createdDate = project.createdAt ? new Date(project.createdAt).toLocaleDateString() : '';
+
+                            projectsHtml += `
+                                <div class="project-item ${project.is_current ? 'current' : ''}">
+                                    <strong>${project.name}</strong>${currentBadge}
+                                    <br><small>ID: ${project.id}${description}</small>
+                                    ${createdDate ? `<br><small>Created: ${createdDate}</small>` : ''}
+                                </div>`;
+                        });
+                        projectsHtml += '</div>';
+
+                        if (!result.current_project_found) {
+                            projectsHtml += `<div class="warning-note">
+                                ⚠ Your configured project ID was not found in accessible projects.
+                                Please check your DREMIO_PROJECT_ID in the .env file.
+                            </div>`;
+                        }
+                    } else {
+                        projectsHtml += '<p class="no-projects">No projects accessible with current credentials.</p>';
+                    }
+
+                    projectsHtml += '</div>';
+                    statusDiv.innerHTML = projectsHtml;
+                } else {
+                    let errorHtml = `<div class="error">
+                        <h4>✗ Failed to Load Projects</h4>
+                        <p><strong>Error:</strong> ${result.message}</p>`;
+
+                    if (result.suggestions && result.suggestions.length > 0) {
+                        errorHtml += '<div class="suggestions"><h5>Suggestions:</h5><ul>';
+                        result.suggestions.forEach(suggestion => {
+                            errorHtml += `<li>${suggestion}</li>`;
+                        });
+                        errorHtml += '</ul></div>';
+                    }
+
+                    errorHtml += '</div>';
+                    statusDiv.innerHTML = errorHtml;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">
+                    <h4>✗ Failed to Load Projects</h4>
+                    <p><strong>Network Error:</strong> ${error.message}</p>
+                    <div class="suggestions">
+                        <h5>Suggestions:</h5>
+                        <ul>
+                            <li>Check if the server is running</li>
+                            <li>Verify your network connection</li>
+                            <li>Test your Dremio connection first</li>
+                        </ul>
+                    </div>
+                </div>`;
+                console.error('Projects loading error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
