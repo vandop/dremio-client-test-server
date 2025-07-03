@@ -94,6 +94,37 @@ def get_job_details(job_id):
         }), 500
 
 
+@app.route('/api/projects')
+def get_projects():
+    """API endpoint to retrieve accessible Dremio projects."""
+    try:
+        result = dremio_client.get_projects()
+
+        if result['success']:
+            return jsonify({
+                'status': 'success',
+                'projects': result['projects'],
+                'total_count': result['total_count'],
+                'current_project_found': result.get('current_project_found', False),
+                'message': result['message']
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result['message'],
+                'error_type': result.get('error_type'),
+                'details': result.get('details'),
+                'suggestions': result.get('suggestions', [])
+            }), 400
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Unexpected error: {str(e)}',
+            'error_type': 'unexpected_error'
+        }), 500
+
+
 @app.route('/health')
 def health_check():
     """Health check endpoint."""

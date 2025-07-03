@@ -79,6 +79,93 @@ class DremioClient:
 
         return url
 
+    def get_projects(self) -> Dict[str, any]:
+        """
+        Get list of accessible projects.
+
+        Returns:
+            Dictionary with projects data and status information
+        """
+        # Ensure we're authenticated
+        if self.pat:
+            auth_result = self._test_pat_auth()
+            if not auth_result['success']:
+                return {
+                    'success': False,
+                    'projects': [],
+                    'error_type': 'authentication_failed',
+                    'message': 'Authentication failed before retrieving projects',
+                    'auth_details': auth_result
+                }
+
+            # If authentication was successful, return the projects from the auth result
+            if 'projects' in auth_result:
+                return {
+                    'success': True,
+                    'projects': auth_result['projects']['accessible_projects'],
+                    'total_count': auth_result['projects']['total_count'],
+                    'current_project_found': auth_result['projects']['current_project_found'],
+                    'message': f"Found {auth_result['projects']['total_count']} accessible projects"
+                }
+
+        # For non-PAT authentication, make a direct call
+        try:
+            projects_url = f"{self.base_url}/v0/projects"
+
+            logger.info(f"Requesting projects from: {projects_url}")
+            response = self.session.get(projects_url, timeout=30)
+
+            logger.info(f"Projects response status: {response.status_code}")
+
+            if response.status_code == 401:
+                return {
+                    'success': False,
+                    'projects': [],
+                    'error_type': 'unauthorized',
+                    'message': 'Unauthorized access to projects',
+                    'suggestions': ['Check your authentication credentials']
+                }
+            elif response.status_code == 403:
+                return {
+                    'success': False,
+                    'projects': [],
+                    'error_type': 'forbidden',
+                    'message': 'Access denied to projects',
+                    'suggestions': ['Check your user permissions']
+                }
+
+            response.raise_for_status()
+
+            projects_data = response.json()
+
+            # Handle different response formats
+            if isinstance(projects_data, list):
+                projects = projects_data
+            elif isinstance(projects_data, dict):
+                projects = projects_data.get('data', projects_data.get('projects', []))
+            else:
+                projects = []
+
+            logger.info(f"✓ Successfully retrieved {len(projects)} projects")
+
+            return {
+                'success': True,
+                'projects': projects,
+                'total_count': len(projects),
+                'message': f'Successfully retrieved {len(projects)} projects'
+            }
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to retrieve projects: {str(e)}"
+            logger.error(error_msg)
+            return {
+                'success': False,
+                'projects': [],
+                'error_type': 'request_error',
+                'message': error_msg,
+                'details': f"Exception type: {type(e).__name__}"
+            }
+
     def _setup_pat_auth(self):
         """Set up Personal Access Token authentication."""
         self.session.headers.update({
@@ -136,27 +223,45 @@ class DremioClient:
     
     def authenticate(self) -> Dict[str, any]:
         """
-        Authenticate with Dremio Cloud and obtain access token.
+        Authenticate with Dremio and test the connection.
 
         Returns:
             Dictionary with authentication status and detailed error information
         """
-        # If we have a PAT, we don't need to authenticate - just test the connection
+        # Check if this is Dremio Cloud
+        is_dremio_cloud = 'api.dremio.cloud' in self.base_url
+
+        if is_dremio_cloud and not self.pat:
+            return {
+                'success': False,
+                'error_type': 'missing_pat',
+                'message': 'Dremio Cloud requires a Personal Access Token (PAT)',
+                'details': 'Username/password authentication is not supported for Dremio Cloud API',
+                'suggestions': [
+                    'Get a PAT from Dremio Cloud UI > Account Settings > Personal Access Tokens',
+                    'Set DREMIO_PAT=your-token in your .env file',
+                    'Remove DREMIO_USERNAME and DREMIO_PASSWORD (not needed with PAT)'
+                ]
+            }
+
+        # If we have a PAT, use it (recommended for Dremio Cloud)
         if self.pat:
             logger.info("Using Personal Access Token authentication")
             return self._test_pat_auth()
 
-        # Fall back to username/password authentication
-        logger.info("Using username/password authentication")
+        # Fall back to username/password authentication (for on-premise)
+        logger.info("Using username/password authentication (on-premise)")
         return self._authenticate_with_credentials()
 
     def _test_pat_auth(self) -> Dict[str, any]:
-        """Test Personal Access Token authentication by making a simple API call."""
+        """Test Personal Access Token authentication and list available projects."""
         try:
-            # Test the PAT by making a simple API call
+            # Test the PAT by making a simple API call to the projects endpoint
             test_url = f"{self.base_url}/v0/projects"
 
             logger.info(f"Testing PAT authentication with: {test_url}")
+            logger.info(f"Authorization header: Bearer {self.pat[:10]}...")
+
             response = self.session.get(test_url, timeout=30)
 
             logger.info(f"PAT test response status: {response.status_code}")
@@ -181,7 +286,7 @@ class DremioClient:
                     'message': 'Personal Access Token lacks sufficient permissions',
                     'details': 'The PAT is valid but cannot access the required resources',
                     'suggestions': [
-                        'Check if your user has access to the project',
+                        'Check if your user has access to projects',
                         'Verify the PAT has the necessary scopes',
                         'Contact your Dremio administrator for permissions'
                     ]
@@ -189,12 +294,69 @@ class DremioClient:
 
             response.raise_for_status()
 
-            logger.info("✓ Personal Access Token authentication successful")
-            return {
-                'success': True,
-                'message': 'Personal Access Token authentication successful',
-                'auth_method': 'pat'
-            }
+            # Parse the projects response
+            try:
+                projects_data = response.json()
+
+                # Handle different response formats
+                if isinstance(projects_data, list):
+                    # Direct list response
+                    projects = projects_data
+                elif isinstance(projects_data, dict):
+                    # Wrapped in data object
+                    projects = projects_data.get('data', projects_data.get('projects', []))
+                else:
+                    projects = []
+
+                logger.info(f"✓ Found {len(projects)} accessible projects")
+
+                # Extract project information
+                project_list = []
+                current_project_found = False
+
+                for project in projects:
+                    project_info = {
+                        'id': project.get('id'),
+                        'name': project.get('name'),
+                        'description': project.get('description', ''),
+                        'createdAt': project.get('createdAt'),
+                        'is_current': project.get('id') == self.project_id
+                    }
+                    project_list.append(project_info)
+
+                    if project.get('id') == self.project_id:
+                        current_project_found = True
+                        logger.info(f"✓ Current project '{project.get('name')}' found and accessible")
+
+                if not current_project_found and self.project_id:
+                    logger.warning(f"⚠ Current project ID '{self.project_id}' not found in accessible projects")
+
+                logger.info("✓ Personal Access Token authentication successful")
+                return {
+                    'success': True,
+                    'message': 'Personal Access Token authentication successful',
+                    'auth_method': 'pat',
+                    'projects': {
+                        'total_count': len(projects),
+                        'accessible_projects': project_list,
+                        'current_project_found': current_project_found,
+                        'current_project_id': self.project_id
+                    }
+                }
+
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse projects response: {e}")
+                return {
+                    'success': False,
+                    'error_type': 'invalid_response',
+                    'message': 'Invalid JSON response from projects endpoint',
+                    'details': f'Response content: {response.text[:200]}...',
+                    'suggestions': [
+                        'Check if the API endpoint is correct',
+                        'Verify your Dremio Cloud instance is accessible',
+                        'Contact support if the issue persists'
+                    ]
+                }
 
         except requests.exceptions.RequestException as e:
             logger.error(f"PAT authentication test failed: {e}")

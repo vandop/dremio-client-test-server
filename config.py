@@ -43,11 +43,20 @@ class Config:
         has_pat = bool(cls.DREMIO_PAT)
         has_username_password = bool(cls.DREMIO_USERNAME and cls.DREMIO_PASSWORD)
 
-        if not has_pat and not has_username_password:
+        # For Dremio Cloud (api.dremio.cloud), PAT is required
+        is_dremio_cloud = cls.DREMIO_CLOUD_URL and 'api.dremio.cloud' in cls.DREMIO_CLOUD_URL
+
+        if is_dremio_cloud and not has_pat:
+            raise ValueError(
+                "Dremio Cloud requires a Personal Access Token (PAT).\n"
+                "Please set DREMIO_PAT in your .env file.\n"
+                "Get your PAT from: Dremio Cloud UI > Account Settings > Personal Access Tokens"
+            )
+        elif not has_pat and not has_username_password:
             raise ValueError(
                 "Missing authentication credentials. Please provide either:\n"
-                "  - DREMIO_PAT (Personal Access Token - recommended for Dremio Cloud)\n"
-                "  - DREMIO_USERNAME and DREMIO_PASSWORD (for on-premise or legacy)"
+                "  - DREMIO_PAT (Personal Access Token - required for Dremio Cloud)\n"
+                "  - DREMIO_USERNAME and DREMIO_PASSWORD (for on-premise Dremio)"
             )
 
         return True
