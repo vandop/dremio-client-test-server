@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dremio Reporting Server</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Hello World - Dremio Reporting Server</h1>
+            <p class="subtitle">Your gateway to Dremio Cloud analytics and reporting</p>
+        </header>
+
+        <main>
+            <div class="welcome-section">
+                <h2>Welcome!</h2>
+                <p>This is a Flask-based web application ready to connect to Dremio Cloud and generate reports.</p>
+                
+                <div class="features">
+                    <div class="feature-card">
+                        <h3>🔗 Dremio Integration</h3>
+                        <p>Connect to Dremio Cloud using PyArrow and REST API</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>📊 Job Reports</h3>
+                        <p>View and analyze Dremio jobs and their execution details</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>🐳 DevContainer Ready</h3>
+                        <p>Fully configured development environment with all dependencies</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <a href="/reports" class="btn btn-primary">View Dremio Jobs Report</a>
+                <button onclick="testConnection()" class="btn btn-secondary">Test Dremio Connection</button>
+            </div>
+
+            <div id="connection-status" class="status-message" style="display: none;"></div>
+        </main>
+
+        <footer>
+            <p>Built with Flask, PyArrow, and ❤️</p>
+        </footer>
+    </div>
+
+    <script>
+        async function testConnection() {
+            const statusDiv = document.getElementById('connection-status');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = '<p class="loading">Testing connection...</p>';
+            
+            try {
+                const response = await fetch('/api/test-connection');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    statusDiv.innerHTML = `<p class="success">✓ ${result.message}</p>`;
+                } else {
+                    statusDiv.innerHTML = `<p class="error">✗ ${result.message}</p>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<p class="error">✗ Connection test failed: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

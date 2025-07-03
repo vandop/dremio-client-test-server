@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  dremio-reporting-server:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/workspace
+    environment:
+      - FLASK_DEBUG=true
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+    env_file:
+      - .env
+    working_dir: /workspace
+    command: python app.py
+    restart: unless-stopped
