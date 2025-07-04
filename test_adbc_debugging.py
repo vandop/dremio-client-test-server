@@ -17,7 +17,7 @@ def test_adbc_driver_status():
     print("\n🔍 Testing ADBC Driver Status")
     
     try:
-        response = requests.get('http://localhost:5007/api/drivers', timeout=10)
+        response = requests.get('http://localhost:5001/api/drivers', timeout=10)
         
         if response.status_code == 200:
             drivers = response.json()
@@ -58,7 +58,7 @@ def test_adbc_simple_queries():
         
         try:
             response = requests.post(
-                'http://localhost:5007/api/query-multi-driver',
+                'http://localhost:5001/api/query-multi-driver',
                 headers={'Content-Type': 'application/json'},
                 json={
                     'sql': sql,
@@ -97,7 +97,7 @@ def test_adbc_vs_pyarrow():
     
     try:
         response = requests.post(
-            'http://localhost:5007/api/query-multi-driver',
+            'http://localhost:5001/api/query-multi-driver',
             headers={'Content-Type': 'application/json'},
             json={
                 'sql': test_sql,
