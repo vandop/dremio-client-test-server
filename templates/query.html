@@ -197,28 +197,52 @@
                 <h3>📝 Example Queries</h3>
                 <p>Click on any example to load it into the editor:</p>
                 
-                <div class="example-query" onclick="loadExample('SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time')">
+                <div class="example-query" onclick="loadExample('SELECT 1 \"test_value\", LOCALTIMESTAMP \"current_time\"')">
                     <strong>Simple Test Query</strong><br>
-                    <code>SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time</code>
+                    <code>SELECT 1 "test_value", LOCALTIMESTAMP "current_time"</code>
                 </div>
-                
+
                 <div class="example-query" onclick="loadExample('SHOW SCHEMAS')">
                     <strong>List Available Schemas</strong><br>
                     <code>SHOW SCHEMAS</code>
                 </div>
-                
-                <div class="example-query" onclick="loadExample('SELECT CURRENT_USER(), CURRENT_TIMESTAMP')">
+
+                <div class="example-query" onclick="loadExample('SELECT USER \"current_user\", LOCALTIMESTAMP \"current_time\"')">
                     <strong>Current User and Time</strong><br>
-                    <code>SELECT CURRENT_USER(), CURRENT_TIMESTAMP</code>
+                    <code>SELECT USER "current_user", LOCALTIMESTAMP "current_time"</code>
+                </div>
+
+                <div class="example-query" onclick="loadExample('SELECT COUNT(*) \"total_schemas\" FROM INFORMATION_SCHEMA.SCHEMATA')">
+                    <strong>Count Schemas</strong><br>
+                    <code>SELECT COUNT(*) "total_schemas" FROM INFORMATION_SCHEMA.SCHEMATA</code>
+                </div>
+
+                <div class="example-query" onclick="loadExample('SELECT SCHEMA_NAME \"schema_name\" FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10')">
+                    <strong>List Schema Names</strong><br>
+                    <code>SELECT SCHEMA_NAME "schema_name" FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10</code>
+                </div>
+
+                <div class="example-query" onclick="loadExample('SELECT 1 \"number\", \'Hello Dremio\' \"message\", LOCALTIMESTAMP \"timestamp\"')">
+                    <strong>Mixed Data Types</strong><br>
+                    <code>SELECT 1 "number", 'Hello Dremio' "message", LOCALTIMESTAMP "timestamp"</code>
+                </div>
+
+                <div class="example-query" onclick="loadExample('SELECT SCHEMA_NAME \"schema\", CATALOG_NAME \"catalog\" FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE \'%sys%\' LIMIT 5')">
+                    <strong>Non-System Schemas</strong><br>
+                    <code>SELECT SCHEMA_NAME "schema", CATALOG_NAME "catalog" FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE '%sys%' LIMIT 5</code>
                 </div>
             </div>
 
             <div class="query-interface">
                 <h3>✏️ SQL Query Editor</h3>
-                <textarea id="queryEditor" class="query-editor" placeholder="Enter your SQL query here...
+                <textarea id="queryEditor" class="query-editor" placeholder="Enter your Dremio SQL query here...
 
-Example:
-SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time"></textarea>
+Examples:
+SELECT 1 \"test_value\", LOCALTIMESTAMP \"current_time\"
+SHOW SCHEMAS
+SELECT USER \"current_user\"
+
+Note: Use double quotes for column aliases in Dremio"></textarea>
 
                 <div class="query-controls">
                     <button onclick="executeQuery()" class="btn btn-primary">Execute Query (Single Driver)</button>
