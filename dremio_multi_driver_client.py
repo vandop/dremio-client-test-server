@@ -352,7 +352,7 @@ class DremioMultiDriverClient:
             raise Exception(result['message'])
 
     def _execute_adbc_flight(self, sql: str) -> Dict[str, Any]:
-        """Execute query using ADBC Flight SQL."""
+        """Execute query using ADBC Flight SQL with schema compatibility workaround."""
         if not self.drivers['adbc_flight']['client']:
             self._create_adbc_flight_client()
 
@@ -370,21 +370,156 @@ class DremioMultiDriverClient:
         cursor = connection.cursor()
         cursor.execute(commented_sql)
 
-        # Fetch results as PyArrow table
+        # WORKAROUND: ADBC driver has schema inconsistency issues with Dremio
+        # Dremio returns nullable fields, but ADBC expects non-nullable
+        # Try multiple approaches to fetch data
+
         import numpy as np
-        arrow_table = cursor.fetch_arrow_table()
-        df = arrow_table.to_pandas()
+        import pandas as pd
+
+        try:
+            # Attempt 1: Try fetch_arrow_table (will likely fail)
+            arrow_table = cursor.fetch_arrow_table()
+            df = arrow_table.to_pandas()
+
+        except Exception as arrow_error:
+            logger.warning(f"ADBC Arrow table fetch failed (expected): {arrow_error}")
+
+            try:
+                # Attempt 2: Try fetchall with manual conversion
+                logger.info("ADBC: Attempting fetchall workaround...")
+
+                # Get column information from cursor description
+                if hasattr(cursor, 'description') and cursor.description:
+                    columns = [desc[0] for desc in cursor.description]
+                else:
+                    # Fallback: try to infer from SQL
+                    columns = self._infer_columns_from_sql(sql)
+
+                # Fetch rows using fetchall
+                rows = cursor.fetchall()
+
+                # Convert to list of dictionaries
+                if rows and columns:
+                    data = [dict(zip(columns, row)) for row in rows]
+                    df = pd.DataFrame(data)
+                else:
+                    # Empty result
+                    df = pd.DataFrame()
+
+                logger.info(f"ADBC: Fetchall workaround successful, {len(df)} rows")
+
+            except Exception as fetchall_error:
+                logger.warning(f"ADBC fetchall workaround failed: {fetchall_error}")
+
+                try:
+                    # Attempt 3: Try fetchone in a loop
+                    logger.info("ADBC: Attempting fetchone workaround...")
+
+                    # Reset cursor
+                    cursor = connection.cursor()
+                    cursor.execute(commented_sql)
+
+                    # Get column information
+                    if hasattr(cursor, 'description') and cursor.description:
+                        columns = [desc[0] for desc in cursor.description]
+                    else:
+                        columns = self._infer_columns_from_sql(sql)
+
+                    # Fetch rows one by one
+                    rows = []
+                    while True:
+                        row = cursor.fetchone()
+                        if row is None:
+                            break
+                        rows.append(row)
+
+                    # Convert to DataFrame
+                    if rows and columns:
+                        data = [dict(zip(columns, row)) for row in rows]
+                        df = pd.DataFrame(data)
+                    else:
+                        df = pd.DataFrame()
+
+                    logger.info(f"ADBC: Fetchone workaround successful, {len(df)} rows")
+
+                except Exception as fetchone_error:
+                    logger.error(f"ADBC: All workarounds failed: {fetchone_error}")
+                    raise Exception(f"ADBC driver incompatible with Dremio schema. "
+                                  f"Arrow error: {arrow_error}. "
+                                  f"Fetchall error: {fetchall_error}. "
+                                  f"Fetchone error: {fetchone_error}")
 
         # Replace NaN values with None for JSON compatibility
-        df = df.replace({np.nan: None})
-
-        data = df.to_dict('records')
+        if not df.empty:
+            df = df.replace({np.nan: None})
+            data = df.to_dict('records')
+            columns = list(df.columns)
+        else:
+            data = []
+            columns = []
 
         return {
             'data': data,
             'row_count': len(data),
-            'columns': list(df.columns)
+            'columns': columns
         }
+
+    def _infer_columns_from_sql(self, sql: str) -> List[str]:
+        """Infer column names from SQL query as fallback."""
+        import re
+
+        # Simple regex to extract column aliases and expressions
+        # This is a basic fallback - not perfect but better than nothing
+
+        # Remove comments
+        sql_clean = re.sub(r'/\*.*?\*/', '', sql, flags=re.DOTALL)
+
+        # Extract SELECT clause
+        select_match = re.search(r'SELECT\s+(.*?)\s+FROM', sql_clean, re.IGNORECASE | re.DOTALL)
+        if not select_match:
+            # No FROM clause, might be a simple SELECT
+            select_match = re.search(r'SELECT\s+(.*)', sql_clean, re.IGNORECASE | re.DOTALL)
+
+        if select_match:
+            select_clause = select_match.group(1).strip()
+
+            # Split by comma (basic - doesn't handle nested functions perfectly)
+            columns = []
+            parts = select_clause.split(',')
+
+            for part in parts:
+                part = part.strip()
+
+                # Look for alias with quotes
+                alias_match = re.search(r'"([^"]+)"$', part)
+                if alias_match:
+                    columns.append(alias_match.group(1))
+                    continue
+
+                # Look for alias with AS
+                as_match = re.search(r'\s+AS\s+([^\s]+)$', part, re.IGNORECASE)
+                if as_match:
+                    alias = as_match.group(1).strip('"\'')
+                    columns.append(alias)
+                    continue
+
+                # Look for simple alias (space separated)
+                space_match = re.search(r'\s+([^\s]+)$', part)
+                if space_match:
+                    alias = space_match.group(1).strip('"\'')
+                    columns.append(alias)
+                    continue
+
+                # No alias found, use the expression itself (simplified)
+                expr = re.sub(r'^\s*\w+\s*\(.*\)\s*$', 'EXPR$0', part)  # Function calls
+                expr = re.sub(r'^\s*\d+\s*$', 'EXPR$0', expr)  # Literals
+                columns.append(expr.strip())
+
+            return columns
+
+        # Fallback
+        return ['EXPR$0']
 
     def _execute_pyodbc(self, sql: str) -> Dict[str, Any]:
         """Execute query using PyODBC."""
