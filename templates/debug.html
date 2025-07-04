@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Configuration - Dremio Reporting Server</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .debug-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .debug-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group input[type="password"] {
+            font-family: monospace;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+        }
+        
+        .config-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #667eea;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+        
+        .projects-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .project-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .project-item:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .project-item.selected {
+            background-color: #667eea;
+            color: white;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-success {
+            background-color: #28a745;
+        }
+        
+        .status-error {
+            background-color: #dc3545;
+        }
+        
+        .status-warning {
+            background-color: #ffc107;
+        }
+        
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding: 0 20px;
+        }
+        
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 0 5px;
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+        }
+        
+        .step.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .step.completed {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔧 Debug Configuration</h1>
+            <nav>
+                <a href="/" class="btn btn-secondary">← Back to Home</a>
+                <a href="/query" class="btn btn-secondary">SQL Query Interface</a>
+                <button onclick="resetConfig()" class="btn btn-warning">Reset to Defaults</button>
+            </nav>
+        </header>
+
+        <div class="debug-container">
+            <!-- Step Indicator -->
+            <div class="step-indicator">
+                <div class="step active" id="step1">
+                    <strong>Step 1</strong><br>
+                    Configure Connection
+                </div>
+                <div class="step" id="step2">
+                    <strong>Step 2</strong><br>
+                    Test & Fetch Projects
+                </div>
+                <div class="step" id="step3">
+                    <strong>Step 3</strong><br>
+                    Select Project
+                </div>
+            </div>
+
+            <!-- Configuration Form -->
+            <div class="debug-section">
+                <h3>🔧 Connection Configuration</h3>
+                <form id="configForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dremioUrl">Dremio URL:</label>
+                            <input type="url" id="dremioUrl" name="DREMIO_CLOUD_URL" 
+                                   placeholder="https://api.dremio.cloud">
+                        </div>
+                        <div class="form-group">
+                            <label for="dremioType">Dremio Type:</label>
+                            <select id="dremioType" name="DREMIO_TYPE">
+                                <option value="cloud">Dremio Cloud</option>
+                                <option value="software">Dremio Software</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="username">Username:</label>
+                            <input type="text" id="username" name="DREMIO_USERNAME" 
+                                   placeholder="your-username">
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Password:</label>
+                            <input type="password" id="password" name="DREMIO_PASSWORD" 
+                                   placeholder="your-password">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="pat">Personal Access Token (PAT) - Recommended:</label>
+                        <input type="password" id="pat" name="DREMIO_PAT" 
+                               placeholder="dremio_pat_...">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="projectId">Project ID (will be populated after testing):</label>
+                        <input type="text" id="projectId" name="DREMIO_PROJECT_ID" 
+                               placeholder="Will be set after fetching projects" readonly>
+                    </div>
+                    
+                    <button type="button" onclick="updateConfig()" class="btn btn-primary">
+                        Update Configuration
+                    </button>
+                    <button type="button" onclick="testConnection()" class="btn btn-success">
+                        Test Connection & Fetch Projects
+                    </button>
+                </form>
+            </div>
+
+            <!-- Current Configuration Display -->
+            <div class="debug-section">
+                <h3>📋 Current Configuration</h3>
+                <div id="currentConfig" class="config-display">
+                    Loading configuration...
+                </div>
+            </div>
+
+            <!-- Connection Status -->
+            <div class="debug-section">
+                <h3>🔗 Connection Status</h3>
+                <div id="connectionStatus">
+                    <p><span class="status-indicator status-warning"></span>Not tested yet</p>
+                </div>
+            </div>
+
+            <!-- Available Projects -->
+            <div class="debug-section" id="projectsSection" style="display: none;">
+                <h3>📁 Available Projects</h3>
+                <p>Click on a project to select it:</p>
+                <div id="projectsList" class="projects-list">
+                    <!-- Projects will be populated here -->
+                </div>
+            </div>
+
+            <!-- Debug Information -->
+            <div class="debug-section">
+                <h3>🐛 Debug Information</h3>
+                <details>
+                    <summary>Show detailed debug info</summary>
+                    <div id="debugInfo" class="config-display">
+                        Loading debug information...
+                    </div>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentConfig = {};
+        let availableProjects = [];
+
+        // Load initial configuration
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCurrentConfig();
+        });
+
+        async function loadCurrentConfig() {
+            try {
+                const response = await fetch('/api/debug/config');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    currentConfig = result.config;
+                    updateFormFields();
+                    updateConfigDisplay();
+                    updateDebugInfo(result.debug_info);
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+
+        function updateFormFields() {
+            document.getElementById('dremioUrl').value = currentConfig.dremio_url || '';
+            document.getElementById('dremioType').value = currentConfig.dremio_type || 'cloud';
+            document.getElementById('username').value = currentConfig.username || '';
+            document.getElementById('password').value = currentConfig.password || '';
+            document.getElementById('pat').value = currentConfig.pat || '';
+            document.getElementById('projectId').value = currentConfig.project_id || '';
+        }
+
+        function updateConfigDisplay() {
+            const configDiv = document.getElementById('currentConfig');
+            const displayConfig = {
+                'Dremio URL': currentConfig.dremio_url || 'Not set',
+                'Dremio Type': currentConfig.dremio_type || 'Not set',
+                'Username': currentConfig.username || 'Not set',
+                'Password': currentConfig.password ? '***hidden***' : 'Not set',
+                'PAT': currentConfig.pat ? '***hidden***' : 'Not set',
+                'Project ID': currentConfig.project_id || 'Not set',
+                'SSL Verify': currentConfig.ssl_verify
+            };
+            
+            configDiv.textContent = JSON.stringify(displayConfig, null, 2);
+        }
+
+        function updateDebugInfo(debugInfo) {
+            const debugDiv = document.getElementById('debugInfo');
+            debugDiv.textContent = JSON.stringify(debugInfo, null, 2);
+        }
+
+        async function updateConfig() {
+            const formData = new FormData(document.getElementById('configForm'));
+            const configData = {};
+            
+            for (let [key, value] of formData.entries()) {
+                if (value.trim() !== '') {
+                    configData[key] = value;
+                }
+            }
+
+            try {
+                const response = await fetch('/api/debug/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(configData)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentConfig = result.current_config;
+                    updateConfigDisplay();
+                    showMessage('Configuration updated successfully!', 'success');
+                    updateStepIndicator(1);
+                } else {
+                    showMessage(`Failed to update config: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error updating config: ${error.message}`, 'error');
+            }
+        }
+
+        async function testConnection() {
+            showMessage('Testing connection and fetching projects...', 'info');
+            updateConnectionStatus('testing', 'Testing connection...');
+
+            try {
+                const response = await fetch('/api/debug/test-connection', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    availableProjects = result.projects || [];
+                    updateConnectionStatus('success', result.message);
+                    displayProjects();
+                    updateStepIndicator(2);
+                    showMessage('Connection successful! Projects fetched.', 'success');
+                } else {
+                    updateConnectionStatus('error', result.message);
+                    showMessage(`Connection failed: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                updateConnectionStatus('error', `Network error: ${error.message}`);
+                showMessage(`Connection test failed: ${error.message}`, 'error');
+            }
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusDiv = document.getElementById('connectionStatus');
+            let statusClass = 'status-warning';
+
+            if (status === 'success') {
+                statusClass = 'status-success';
+            } else if (status === 'error') {
+                statusClass = 'status-error';
+            }
+
+            statusDiv.innerHTML = `<p><span class="status-indicator ${statusClass}"></span>${message}</p>`;
+        }
+
+        function displayProjects() {
+            const projectsSection = document.getElementById('projectsSection');
+            const projectsList = document.getElementById('projectsList');
+
+            if (availableProjects.length === 0) {
+                projectsSection.style.display = 'none';
+                return;
+            }
+
+            projectsSection.style.display = 'block';
+            projectsList.innerHTML = '';
+
+            availableProjects.forEach(project => {
+                const projectDiv = document.createElement('div');
+                projectDiv.className = 'project-item';
+                projectDiv.innerHTML = `
+                    <strong>${project.name}</strong><br>
+                    <small>ID: ${project.id}</small>
+                    ${project.is_current ? '<span style="color: #28a745;"> (Current)</span>' : ''}
+                `;
+
+                projectDiv.onclick = () => selectProject(project.id, projectDiv);
+                projectsList.appendChild(projectDiv);
+            });
+        }
+
+        async function selectProject(projectId, element) {
+            // Update UI
+            document.querySelectorAll('.project-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            element.classList.add('selected');
+
+            try {
+                const response = await fetch('/api/debug/set-project', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ project_id: projectId })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    document.getElementById('projectId').value = projectId;
+                    currentConfig = result.current_config;
+                    updateConfigDisplay();
+                    updateStepIndicator(3);
+                    showMessage(`Project selected: ${projectId}`, 'success');
+                } else {
+                    showMessage(`Failed to set project: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error setting project: ${error.message}`, 'error');
+            }
+        }
+
+        async function resetConfig() {
+            if (!confirm('Are you sure you want to reset all configuration to defaults?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/debug/reset', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentConfig = result.current_config;
+                    availableProjects = [];
+                    updateFormFields();
+                    updateConfigDisplay();
+                    updateConnectionStatus('warning', 'Configuration reset - not tested yet');
+                    document.getElementById('projectsSection').style.display = 'none';
+                    updateStepIndicator(1);
+                    showMessage('Configuration reset to defaults', 'success');
+                } else {
+                    showMessage(`Failed to reset config: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error resetting config: ${error.message}`, 'error');
+            }
+        }
+
+        function updateStepIndicator(currentStep) {
+            const steps = document.querySelectorAll('.step');
+
+            steps.forEach((step, index) => {
+                step.classList.remove('active', 'completed');
+
+                if (index + 1 < currentStep) {
+                    step.classList.add('completed');
+                } else if (index + 1 === currentStep) {
+                    step.classList.add('active');
+                }
+            });
+        }
+
+        function showMessage(message, type) {
+            // Create or update message display
+            let messageDiv = document.getElementById('messageDisplay');
+            if (!messageDiv) {
+                messageDiv = document.createElement('div');
+                messageDiv.id = 'messageDisplay';
+                messageDiv.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    padding: 15px 20px;
+                    border-radius: 4px;
+                    color: white;
+                    font-weight: 600;
+                    z-index: 1000;
+                    max-width: 400px;
+                `;
+                document.body.appendChild(messageDiv);
+            }
+
+            // Set color based on type
+            const colors = {
+                success: '#28a745',
+                error: '#dc3545',
+                warning: '#ffc107',
+                info: '#17a2b8'
+            };
+
+            messageDiv.style.backgroundColor = colors[type] || colors.info;
+            messageDiv.textContent = message;
+            messageDiv.style.display = 'block';
+
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
