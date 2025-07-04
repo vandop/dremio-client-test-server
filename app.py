@@ -232,15 +232,32 @@ def execute_query_multi_driver():
         # Close connections
         client.close_connections()
 
+        # Ensure all results are JSON serializable
+        def make_json_serializable(obj):
+            """Convert objects to JSON serializable format."""
+            if obj is None:
+                return None
+            elif isinstance(obj, (str, int, float, bool)):
+                return obj
+            elif isinstance(obj, (list, tuple)):
+                return [make_json_serializable(item) for item in obj]
+            elif isinstance(obj, dict):
+                return {key: make_json_serializable(value) for key, value in obj.items()}
+            else:
+                # Convert any other object to string
+                return str(obj)
+
+        serializable_results = make_json_serializable(results)
+
         return jsonify({
             'status': 'success',
             'sql': sql,
             'drivers_tested': valid_drivers,
-            'results': results,
+            'results': serializable_results,
             'summary': {
                 'total_drivers': len(valid_drivers),
-                'successful': len([r for r in results.values() if r.get('success', False)]),
-                'failed': len([r for r in results.values() if not r.get('success', False)])
+                'successful': len([r for r in serializable_results.values() if r.get('success', False)]),
+                'failed': len([r for r in serializable_results.values() if not r.get('success', False)])
             }
         })
 
