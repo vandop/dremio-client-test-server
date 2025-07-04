@@ -151,8 +151,12 @@ class DremioPyArrowClient:
                 table = flight_reader.read_all()
                 
                 # Convert to pandas DataFrame for easier handling
+                import numpy as np
                 df = table.to_pandas()
-                
+
+                # Replace NaN values with None for JSON compatibility
+                df = df.replace({np.nan: None})
+
                 # Convert to list of dictionaries
                 data = df.to_dict('records')
                 

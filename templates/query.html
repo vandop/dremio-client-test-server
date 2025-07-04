@@ -231,6 +231,26 @@
                     <strong>Non-System Schemas</strong><br>
                     <code>SELECT SCHEMA_NAME "schema", CATALOG_NAME "catalog" FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE '%sys%' LIMIT 5</code>
                 </div>
+
+                <div class="example-query" onclick="loadExample(`SELECT * FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; LIMIT 10`)">
+                    <strong>Augment Usage Data</strong><br>
+                    <code>SELECT * FROM "@vando.pereira@dremio.com"."augment-daily-usage" LIMIT 10</code>
+                </div>
+
+                <div class="example-query" onclick="loadExample(`SELECT user_id, &quot;Date&quot;, completions_acceptance_rate_percentage FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; WHERE &quot;Date&quot; >= '2025-06-01' ORDER BY &quot;Date&quot; DESC LIMIT 10`)">
+                    <strong>Recent Usage by User</strong><br>
+                    <code>SELECT user_id, "Date", completions_acceptance_rate_percentage FROM "@vando.pereira@dremio.com"."augment-daily-usage" WHERE "Date" >= '2025-06-01' ORDER BY "Date" DESC LIMIT 10</code>
+                </div>
+
+                <div class="example-query" onclick="loadExample(`SELECT user_id, AVG(completions_acceptance_rate_percentage) &quot;avg_acceptance_rate&quot; FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; WHERE completions_total > 0 GROUP BY user_id ORDER BY AVG(completions_acceptance_rate_percentage) DESC LIMIT 10`)">
+                    <strong>Top Performers by Acceptance Rate</strong><br>
+                    <code>SELECT user_id, AVG(completions_acceptance_rate_percentage) "avg_acceptance_rate" FROM "@vando.pereira@dremio.com"."augment-daily-usage" WHERE completions_total > 0 GROUP BY user_id ORDER BY AVG(completions_acceptance_rate_percentage) DESC LIMIT 10</code>
+                </div>
+
+                <div class="example-query" onclick="loadExample(`SELECT COUNT(DISTINCT user_id) &quot;total_users&quot;, COUNT(*) &quot;total_records&quot;, MAX(&quot;Date&quot;) &quot;latest_date&quot;, MIN(&quot;Date&quot;) &quot;earliest_date&quot; FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot;`)">
+                    <strong>Usage Summary Statistics</strong><br>
+                    <code>SELECT COUNT(DISTINCT user_id) "total_users", COUNT(*) "total_records", MAX("Date") "latest_date", MIN("Date") "earliest_date" FROM "@vando.pereira@dremio.com"."augment-daily-usage"</code>
+                </div>
             </div>
 
             <div class="query-interface">
@@ -241,8 +261,9 @@ Examples:
 SELECT 1 \"test_value\", LOCALTIMESTAMP \"current_time\"
 SHOW SCHEMAS
 SELECT USER \"current_user\"
+SELECT * FROM \"@vando.pereira@dremio.com\".\"augment-daily-usage\" LIMIT 10
 
-Note: Use double quotes for column aliases in Dremio"></textarea>
+Note: Use double quotes for column aliases and reserved keywords like \"Date\" in Dremio"></textarea>
 
                 <div class="query-controls">
                     <button onclick="executeQuery()" class="btn btn-primary">Execute Query (Single Driver)</button>

@@ -318,8 +318,13 @@ class DremioMultiDriverClient:
         cursor.execute(sql)
 
         # Fetch results as PyArrow table
+        import numpy as np
         arrow_table = cursor.fetch_arrow_table()
         df = arrow_table.to_pandas()
+
+        # Replace NaN values with None for JSON compatibility
+        df = df.replace({np.nan: None})
+
         data = df.to_dict('records')
 
         return {
