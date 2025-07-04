@@ -99,6 +99,87 @@
             font-family: 'Courier New', monospace;
             font-size: 13px;
         }
+
+        .driver-checkbox {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .driver-checkbox input {
+            margin-right: 8px;
+        }
+
+        .driver-checkbox:hover {
+            background-color: #f0f0f0;
+        }
+
+        .driver-checkbox.checked {
+            background-color: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .multi-driver-results {
+            margin-top: 20px;
+        }
+
+        .driver-result {
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .driver-result-header {
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .driver-result-header.success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .driver-result-header.error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        .driver-performance {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .performance-comparison {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .performance-bar {
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+
+        .performance-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+            transition: width 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -138,14 +219,29 @@
 
 Example:
 SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time"></textarea>
-                
+
                 <div class="query-controls">
-                    <button onclick="executeQuery()" class="btn btn-primary">Execute Query</button>
+                    <button onclick="executeQuery()" class="btn btn-primary">Execute Query (Single Driver)</button>
+                    <button onclick="executeQueryMultiDriver()" class="btn btn-success">Execute on Multiple Drivers</button>
                     <label>
                         Limit:
                         <input type="number" id="limitInput" value="100" min="1" max="10000">
                     </label>
                     <button onclick="clearResults()" class="btn btn-secondary">Clear Results</button>
+                </div>
+
+                <!-- Driver Selection -->
+                <div id="driverSelection" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+                    <h4>🔧 Select Drivers to Test:</h4>
+                    <div id="driverCheckboxes">
+                        <!-- Driver checkboxes will be populated here -->
+                    </div>
+                    <button onclick="runMultiDriverQuery()" class="btn btn-primary" style="margin-top: 10px;">
+                        Run Query on Selected Drivers
+                    </button>
+                    <button onclick="cancelMultiDriver()" class="btn btn-secondary" style="margin-top: 10px;">
+                        Cancel
+                    </button>
                 </div>
             </div>
 
@@ -173,6 +269,59 @@ SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time"></textarea>
     </div>
 
     <script>
+        let availableDrivers = {};
+
+        // Load available drivers on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAvailableDrivers();
+        });
+
+        async function loadAvailableDrivers() {
+            try {
+                const response = await fetch('/api/drivers');
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    availableDrivers = result.drivers;
+                    setupDriverCheckboxes();
+                }
+            } catch (error) {
+                console.error('Failed to load drivers:', error);
+            }
+        }
+
+        function setupDriverCheckboxes() {
+            const container = document.getElementById('driverCheckboxes');
+            container.innerHTML = '';
+
+            Object.entries(availableDrivers).forEach(([driverKey, driverInfo]) => {
+                const label = document.createElement('label');
+                label.className = 'driver-checkbox';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = driverKey;
+                checkbox.checked = driverKey === 'pyarrow_flight'; // Default to PyArrow Flight
+
+                checkbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        label.classList.add('checked');
+                    } else {
+                        label.classList.remove('checked');
+                    }
+                });
+
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(driverInfo.name));
+
+                if (checkbox.checked) {
+                    label.classList.add('checked');
+                }
+
+                container.appendChild(label);
+            });
+        }
+
         function loadExample(sql) {
             document.getElementById('queryEditor').value = sql;
         }
@@ -318,6 +467,235 @@ SELECT 1 as test_value, CURRENT_TIMESTAMP as current_time"></textarea>
         function clearResults() {
             document.getElementById('results-container').style.display = 'none';
             document.getElementById('error-message').style.display = 'none';
+
+            // Clear multi-driver results
+            const multiResults = document.getElementById('multi-driver-results');
+            if (multiResults) {
+                multiResults.remove();
+            }
+        }
+
+        async function executeQueryMultiDriver() {
+            const sql = document.getElementById('queryEditor').value.trim();
+
+            if (!sql) {
+                alert('Please enter a SQL query');
+                return;
+            }
+
+            // Show driver selection
+            document.getElementById('driverSelection').style.display = 'block';
+        }
+
+        function cancelMultiDriver() {
+            document.getElementById('driverSelection').style.display = 'none';
+        }
+
+        async function runMultiDriverQuery() {
+            const sql = document.getElementById('queryEditor').value.trim();
+            const selectedDrivers = Array.from(document.querySelectorAll('#driverCheckboxes input:checked'))
+                .map(cb => cb.value);
+
+            if (selectedDrivers.length === 0) {
+                alert('Please select at least one driver');
+                return;
+            }
+
+            // Hide driver selection
+            document.getElementById('driverSelection').style.display = 'none';
+
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('error-message');
+
+            // Show loading state
+            loading.style.display = 'block';
+            errorMessage.style.display = 'none';
+            clearResults();
+
+            try {
+                const response = await fetch('/api/query-multi-driver', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sql: sql,
+                        drivers: selectedDrivers
+                    })
+                });
+
+                const result = await response.json();
+                loading.style.display = 'none';
+
+                if (result.status === 'success') {
+                    displayMultiDriverResults(result);
+                } else {
+                    showError(result);
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                showError({
+                    message: `Network error: ${error.message}`,
+                    error_type: 'network_error',
+                    suggestions: [
+                        'Check if the server is running',
+                        'Verify your network connection',
+                        'Check browser console for more details'
+                    ]
+                });
+                console.error('Multi-driver query execution error:', error);
+            }
+        }
+
+        function displayMultiDriverResults(result) {
+            // Remove any existing multi-driver results
+            const existingResults = document.getElementById('multi-driver-results');
+            if (existingResults) {
+                existingResults.remove();
+            }
+
+            // Create multi-driver results container
+            const multiResultsContainer = document.createElement('div');
+            multiResultsContainer.id = 'multi-driver-results';
+            multiResultsContainer.className = 'multi-driver-results';
+
+            // Add performance comparison
+            const performanceHtml = createPerformanceComparison(result.results);
+            multiResultsContainer.innerHTML = performanceHtml;
+
+            // Add individual driver results
+            Object.entries(result.results).forEach(([driverKey, driverResult]) => {
+                const driverResultDiv = createDriverResultDiv(driverKey, driverResult);
+                multiResultsContainer.appendChild(driverResultDiv);
+            });
+
+            // Insert after the loading div
+            const loading = document.getElementById('loading');
+            loading.parentNode.insertBefore(multiResultsContainer, loading.nextSibling);
+        }
+
+        function createPerformanceComparison(results) {
+            const successfulResults = Object.entries(results).filter(([_, result]) => result.success);
+
+            if (successfulResults.length === 0) {
+                return '<div class="performance-comparison"><h4>⚠️ No successful results to compare</h4></div>';
+            }
+
+            // Sort by execution time
+            successfulResults.sort((a, b) => a[1].execution_time - b[1].execution_time);
+            const fastest = successfulResults[0][1].execution_time;
+            const slowest = successfulResults[successfulResults.length - 1][1].execution_time;
+
+            let html = `
+                <div class="performance-comparison">
+                    <h4>⚡ Performance Comparison</h4>
+                    <p><strong>Query:</strong> <code>${results[Object.keys(results)[0]].sql || 'N/A'}</code></p>
+                    <p><strong>Drivers tested:</strong> ${Object.keys(results).length} |
+                       <strong>Successful:</strong> ${successfulResults.length} |
+                       <strong>Failed:</strong> ${Object.keys(results).length - successfulResults.length}</p>
+            `;
+
+            successfulResults.forEach(([driverKey, result]) => {
+                const percentage = fastest > 0 ? (result.execution_time / slowest) * 100 : 100;
+                const isWinner = result.execution_time === fastest;
+
+                html += `
+                    <div style="margin: 8px 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span><strong>${result.driver_name}</strong> ${isWinner ? '🏆' : ''}</span>
+                            <span>${result.execution_time.toFixed(3)}s (${result.row_count} rows)</span>
+                        </div>
+                        <div class="performance-bar">
+                            <div class="performance-fill" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            return html;
+        }
+
+        function createDriverResultDiv(driverKey, driverResult) {
+            const div = document.createElement('div');
+            div.className = 'driver-result';
+
+            const headerClass = driverResult.success ? 'success' : 'error';
+            const statusIcon = driverResult.success ? '✅' : '❌';
+
+            let headerHtml = `
+                <div class="driver-result-header ${headerClass}">
+                    <div>
+                        <h4>${statusIcon} ${driverResult.driver_name || driverKey}</h4>
+                        ${driverResult.success ?
+                            `<p>Returned ${driverResult.row_count} rows in ${driverResult.execution_time.toFixed(3)}s</p>` :
+                            `<p>Error: ${driverResult.error}</p>`
+                        }
+                    </div>
+                    <div class="driver-performance">
+                        ${driverResult.success ?
+                            `<div>⚡ ${driverResult.execution_time.toFixed(3)}s</div><div>📊 ${driverResult.row_count} rows</div>` :
+                            `<div>💥 Failed</div>`
+                        }
+                    </div>
+                </div>
+            `;
+
+            div.innerHTML = headerHtml;
+
+            if (driverResult.success && driverResult.data && driverResult.data.length > 0) {
+                // Add table for successful results
+                const tableContainer = document.createElement('div');
+                tableContainer.style.maxHeight = '300px';
+                tableContainer.style.overflow = 'auto';
+
+                const table = document.createElement('table');
+                table.className = 'results-table';
+
+                // Create header
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                driverResult.columns.forEach(column => {
+                    const th = document.createElement('th');
+                    th.textContent = column;
+                    th.title = column;
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+
+                // Create body (show first 10 rows)
+                const tbody = document.createElement('tbody');
+                const rowsToShow = driverResult.data.slice(0, 10);
+                rowsToShow.forEach(row => {
+                    const tr = document.createElement('tr');
+                    driverResult.columns.forEach(column => {
+                        const td = document.createElement('td');
+                        const value = row[column];
+                        td.textContent = value !== null && value !== undefined ? String(value) : 'NULL';
+                        td.title = td.textContent;
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+
+                if (driverResult.data.length > 10) {
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = driverResult.columns.length;
+                    td.textContent = `... and ${driverResult.data.length - 10} more rows`;
+                    td.style.textAlign = 'center';
+                    td.style.fontStyle = 'italic';
+                    tr.appendChild(td);
+                    tbody.appendChild(tr);
+                }
+
+                table.appendChild(tbody);
+                tableContainer.appendChild(table);
+                div.appendChild(tableContainer);
+            }
+
+            return div;
         }
 
         // Allow Ctrl+Enter to execute query

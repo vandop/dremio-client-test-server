@@ -1,13 +1,16 @@
 """
 Main Flask application for Dremio Reporting Server.
 """
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session
 from config import Config
 from dremio_hybrid_client import DremioHybridClient
+from dremio_multi_driver_client import DremioMultiDriverClient
+from debug_config import debug_config_manager
 import os
 
 app = Flask(__name__)
 app.config.from_object(Config)
+app.secret_key = os.environ.get('SECRET_KEY', 'debug-secret-key-change-in-production')
 
 # Initialize Dremio hybrid client (Flight SQL + REST API)
 dremio_client = DremioHybridClient()
@@ -29,6 +32,12 @@ def reports():
 def query():
     """SQL Query interface page."""
     return render_template('query.html')
+
+
+@app.route('/debug')
+def debug():
+    """Debug configuration page."""
+    return render_template('debug.html')
 
 
 @app.route('/api/test-connection')
@@ -179,6 +188,92 @@ def execute_query():
         }), 500
 
 
+@app.route('/api/query-multi-driver', methods=['POST'])
+def execute_query_multi_driver():
+    """Execute SQL query across multiple drivers."""
+    try:
+        data = request.get_json()
+        if not data or 'sql' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing SQL query in request body'
+            }), 400
+
+        sql = data['sql']
+        drivers = data.get('drivers', ['pyarrow_flight'])  # Default to PyArrow Flight
+
+        if not drivers:
+            return jsonify({
+                'status': 'error',
+                'message': 'At least one driver must be selected'
+            }), 400
+
+        # Create multi-driver client with debug config if available
+        config_override = debug_config_manager.get_config_for_client()
+        client = DremioMultiDriverClient(config_override=config_override)
+
+        # Get available drivers
+        available_drivers = client.get_available_drivers()
+
+        # Filter requested drivers to only available ones
+        valid_drivers = [d for d in drivers if d in available_drivers]
+
+        if not valid_drivers:
+            return jsonify({
+                'status': 'error',
+                'message': 'None of the requested drivers are available',
+                'requested_drivers': drivers,
+                'available_drivers': list(available_drivers.keys())
+            }), 400
+
+        # Execute query across multiple drivers
+        results = client.execute_query_multi_driver(sql, valid_drivers)
+
+        # Close connections
+        client.close_connections()
+
+        return jsonify({
+            'status': 'success',
+            'sql': sql,
+            'drivers_tested': valid_drivers,
+            'results': results,
+            'summary': {
+                'total_drivers': len(valid_drivers),
+                'successful': len([r for r in results.values() if r.get('success', False)]),
+                'failed': len([r for r in results.values() if not r.get('success', False)])
+            }
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Multi-driver query failed: {str(e)}'
+        }), 500
+
+
+@app.route('/api/drivers')
+def get_available_drivers():
+    """Get available database drivers."""
+    try:
+        # Create client with debug config
+        config_override = debug_config_manager.get_config_for_client()
+        client = DremioMultiDriverClient(config_override=config_override)
+
+        available_drivers = client.get_available_drivers()
+
+        return jsonify({
+            'status': 'success',
+            'drivers': available_drivers,
+            'count': len(available_drivers)
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get drivers: {str(e)}'
+        }), 500
+
+
 @app.route('/api/schemas')
 def get_schemas():
     """API endpoint to get available schemas using Flight SQL."""
@@ -216,6 +311,96 @@ def health_check():
         'status': 'healthy',
         'service': 'Dremio Reporting Server'
     })
+
+
+@app.route('/api/debug/config', methods=['GET', 'POST'])
+def debug_config():
+    """Debug configuration management."""
+    try:
+        if request.method == 'GET':
+            return jsonify({
+                'status': 'success',
+                'config': debug_config_manager.get_current_config(),
+                'debug_info': debug_config_manager.get_debug_info()
+            })
+
+        elif request.method == 'POST':
+            data = request.get_json() or {}
+            result = debug_config_manager.update_config(data)
+            return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Debug config error: {str(e)}'
+        }), 500
+
+
+@app.route('/api/debug/test-connection', methods=['POST'])
+def debug_test_connection():
+    """Test connection and fetch projects with debug config."""
+    try:
+        result = debug_config_manager.test_connection_and_fetch_projects()
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Connection test failed: {str(e)}'
+        }), 500
+
+
+@app.route('/api/debug/projects', methods=['GET'])
+def debug_get_projects():
+    """Get available projects from debug config."""
+    try:
+        projects = debug_config_manager.get_available_projects()
+        return jsonify({
+            'status': 'success',
+            'projects': projects,
+            'count': len(projects)
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get projects: {str(e)}'
+        }), 500
+
+
+@app.route('/api/debug/set-project', methods=['POST'])
+def debug_set_project():
+    """Set project ID after fetching projects."""
+    try:
+        data = request.get_json()
+        if not data or 'project_id' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing project_id in request'
+            }), 400
+
+        result = debug_config_manager.set_project_id(data['project_id'])
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to set project: {str(e)}'
+        }), 500
+
+
+@app.route('/api/debug/reset', methods=['POST'])
+def debug_reset_config():
+    """Reset debug configuration to defaults."""
+    try:
+        result = debug_config_manager.reset_config()
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to reset config: {str(e)}'
+        }), 500
 
 
 if __name__ == '__main__':
