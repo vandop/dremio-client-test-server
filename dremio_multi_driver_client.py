@@ -198,33 +198,75 @@ class DremioMultiDriverClient:
         password = self._get_config_value('DREMIO_PASSWORD')
         pat = self._get_config_value('DREMIO_PAT')
         
-        # Extract host from URL
+        # Get project ID for Dremio Cloud
+        project_id = self._get_config_value('DREMIO_PROJECT_ID')
+
+        # Extract host from URL and configure for Dremio Cloud
         host = base_url.replace('https://', '').replace('http://', '').split('/')[0]
-        if 'api.dremio.cloud' in host:
-            host = 'data.dremio.cloud'
-        
-        # JDBC URL and credentials
-        jdbc_url = f"jdbc:dremio:direct={host}:443;ssl=true"
-        
+
+        # JDBC URL and credentials for Dremio Cloud
+        if 'dremio.cloud' in host:
+            # Dremio Cloud uses sql.dremio.cloud for JDBC connections (not data.dremio.cloud)
+            jdbc_host = 'sql.dremio.cloud'
+            jdbc_url = f"jdbc:dremio:direct={jdbc_host}:443;ssl=true"
+
+            # Add project_id if available (required for Dremio Cloud)
+            if project_id:
+                jdbc_url += f";PROJECT_ID={project_id}"
+        else:
+            # On-premise Dremio typically uses port 31010
+            jdbc_url = f"jdbc:dremio:direct={host}:31010;ssl=true"
+
+        # Authentication configuration for Dremio Cloud
         if pat:
-            auth_user = "token"
+            # For Dremio Cloud with PAT: use "$token" as username and PAT as password
+            auth_user = "$token"
             auth_pass = pat
         else:
             auth_user = username
             auth_pass = password
         
         try:
-            # Start JVM if not already started
+            # Find JDBC driver JAR file
+            import os
+            import glob
+
+            # Look for JDBC driver in jdbc-drivers directory
+            jar_pattern = os.path.join(os.path.dirname(__file__), 'jdbc-drivers', '*.jar')
+            jar_files = glob.glob(jar_pattern)
+
+            if not jar_files:
+                raise FileNotFoundError("No JDBC driver JAR files found in jdbc-drivers/ directory")
+
+            # Use the first JAR file found (should be the Dremio driver)
+            jar_path = jar_files[0]
+            logger.info(f"Using JDBC driver: {jar_path}")
+
+            # Start JVM if not already started with the JAR in classpath
             if not jpype.isJVMStarted():
-                jpype.startJVM()
-            
-            # Note: This requires the Dremio JDBC driver JAR file
-            connection = jaydebeapi.connect(
-                "com.dremio.jdbc.Driver",
-                jdbc_url,
-                [auth_user, auth_pass],
-                "/path/to/dremio-jdbc-driver.jar"  # This would need to be configured
-            )
+                jpype.startJVM(classpath=[jar_path])
+            else:
+                # If JVM is already started, we need to add the JAR to the classpath
+                jpype.addClassPath(jar_path)
+
+            # Connect using the Dremio JDBC driver JAR file
+            # For Dremio Cloud, use Properties-based authentication as shown in Java examples
+            if 'dremio.cloud' in base_url and pat:
+                # Use Properties approach for Dremio Cloud with PAT
+                connection = jaydebeapi.connect(
+                    "com.dremio.jdbc.Driver",
+                    jdbc_url,
+                    {"user": auth_user, "password": auth_pass},
+                    jar_path
+                )
+            else:
+                # Use array approach for on-premise or username/password auth
+                connection = jaydebeapi.connect(
+                    "com.dremio.jdbc.Driver",
+                    jdbc_url,
+                    [auth_user, auth_pass],
+                    jar_path
+                )
             self.drivers['jdbc']['client'] = connection
             return connection
         except Exception as e:
@@ -395,12 +437,30 @@ class DremioMultiDriverClient:
         cursor = connection.cursor()
         cursor.execute(commented_sql)
 
-        # Fetch column names
-        columns = [desc[0] for desc in cursor.description]
+        # Fetch column names and convert Java strings to Python strings
+        columns = [str(desc[0]) for desc in cursor.description]
 
         # Fetch all rows
         rows = cursor.fetchall()
-        data = [dict(zip(columns, row)) for row in rows]
+
+        # Convert Java objects to JSON-serializable Python objects
+        data = []
+        for row in rows:
+            row_dict = {}
+            for i, value in enumerate(row):
+                # Ensure column name is a Python string
+                column_name = str(columns[i])
+
+                # Convert Java objects to Python equivalents
+                if value is None:
+                    row_dict[column_name] = None
+                elif hasattr(value, '__class__') and 'java' in str(value.__class__):
+                    # Handle Java objects by converting to string
+                    row_dict[column_name] = str(value)
+                else:
+                    # Handle Python objects directly
+                    row_dict[column_name] = value
+            data.append(row_dict)
 
         return {
             'data': data,

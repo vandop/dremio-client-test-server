@@ -2,17 +2,57 @@ version: '3.8'
 
 services:
   dremio-reporting-server:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dremio-reporting-server
     ports:
       - "5000:5000"
     volumes:
-      - .:/workspace
+      # Development volume mount
+      - .:/app
+      # JDBC drivers directory
+      - ./jdbc-drivers:/app/jdbc-drivers
     environment:
+      # Java Environment for JDBC support
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+      - PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+
+      # Flask Configuration
       - FLASK_DEBUG=true
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
+
+      # Dremio Configuration (override in .env file)
+      - DREMIO_URL=${DREMIO_URL:-https://api.dremio.cloud}
+      - DREMIO_TYPE=${DREMIO_TYPE:-cloud}
+      - DREMIO_USERNAME=${DREMIO_USERNAME:-}
+      - DREMIO_PASSWORD=${DREMIO_PASSWORD:-}
+      - DREMIO_PAT=${DREMIO_PAT:-}
+      - DREMIO_PROJECT_ID=${DREMIO_PROJECT_ID:-}
+
+      # Server Configuration
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-5000}
+      - DEBUG=${DEBUG:-true}
+
     env_file:
       - .env
-    working_dir: /workspace
+
+    working_dir: /app
     command: python app.py
     restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - dremio-network
+
+networks:
+  dremio-network:
+    driver: bridge
