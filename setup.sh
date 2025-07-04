@@ -197,6 +197,104 @@ except ImportError as e:
     fi
 }
 
+# Download JDBC driver if not present
+download_jdbc_driver() {
+    print_info "Checking JDBC driver availability..."
+
+    # Create jdbc-drivers directory if it doesn't exist
+    if [ ! -d "jdbc-drivers" ]; then
+        mkdir -p jdbc-drivers
+        print_status "Created jdbc-drivers directory"
+    fi
+
+    # Check if JDBC driver already exists
+    if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
+        local file_size=$(stat -c%s "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" 2>/dev/null || echo "0")
+        if [ "$file_size" -gt 1000000 ]; then  # Check if file is larger than 1MB (valid JAR)
+            print_status "JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
+            return 0
+        else
+            print_warning "JDBC driver file exists but appears corrupted, re-downloading..."
+            rm -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+        fi
+    fi
+
+    print_info "Downloading Dremio JDBC driver..."
+
+    # Check if wget is available
+    if ! command -v wget &> /dev/null; then
+        print_error "wget is required to download the JDBC driver"
+        print_info "Installing wget..."
+        $SUDO apt-get update -qq
+        $SUDO apt-get install -y wget
+    fi
+
+    # Download the JDBC driver
+    local download_url="https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar"
+    local temp_file="jdbc-drivers/dremio-jdbc-driver-LATEST.jar.tmp"
+
+    print_info "Downloading from: $download_url"
+    if wget -q --show-progress -O "$temp_file" "$download_url"; then
+        # Verify the download
+        local downloaded_size=$(stat -c%s "$temp_file" 2>/dev/null || echo "0")
+        if [ "$downloaded_size" -gt 1000000 ]; then  # Check if downloaded file is larger than 1MB
+            mv "$temp_file" "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+            print_status "JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
+
+            # Create README if it doesn't exist
+            if [ ! -f "jdbc-drivers/README.md" ]; then
+                cat > "jdbc-drivers/README.md" << 'EOF'
+# JDBC Drivers Directory
+
+This directory contains JDBC driver JAR files for database connectivity.
+
+## Dremio JDBC Driver
+
+The `dremio-jdbc-driver-LATEST.jar` file is the official Dremio JDBC driver that enables Java applications to connect to Dremio using the JDBC protocol.
+
+### Download Information
+- **Source**: https://download.dremio.com/jdbc-driver/
+- **Auto-downloaded**: This file is automatically downloaded by the setup script
+- **Size**: ~45-50MB
+- **Version**: Latest available from Dremio
+
+### Usage
+The Enhanced Dremio Reporting Server automatically detects and uses this driver when available. No additional configuration is required.
+
+### Manual Download
+If you need to manually download or update the driver:
+
+```bash
+cd jdbc-drivers
+wget https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar
+```
+
+### Verification
+To verify the driver is working:
+```bash
+python test_java_setup.py
+```
+
+### Troubleshooting
+- Ensure the JAR file is not corrupted (should be 45-50MB)
+- Verify Java 11+ is installed and JAVA_HOME is set
+- Check that JPype and JayDeBeApi Python packages are installed
+EOF
+                print_status "Created JDBC drivers README"
+            fi
+        else
+            rm -f "$temp_file"
+            print_error "Downloaded file appears to be corrupted or incomplete"
+            return 1
+        fi
+    else
+        rm -f "$temp_file"
+        print_error "Failed to download JDBC driver"
+        print_warning "You can manually download it from: $download_url"
+        return 1
+    fi
+}
+
 # Create test script for Java functionality
 create_java_test() {
     print_info "Creating Java functionality test script..."
@@ -294,7 +392,10 @@ main() {
     
     # Test Java integration
     test_java_integration
-    
+
+    # Download JDBC driver
+    download_jdbc_driver
+
     # Create test script
     create_java_test
     
@@ -305,6 +406,16 @@ main() {
     echo "  1. Edit .env file with your Dremio credentials"
     echo "  2. Run: python test_java_setup.py (to verify Java setup)"
     echo "  3. Run: python app.py (to start the server)"
+    echo ""
+    print_info "JDBC Driver Status:"
+    if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
+        local driver_size=$(stat -c%s "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" 2>/dev/null || echo "0")
+        echo "  ✅ Dremio JDBC driver installed ($(($driver_size / 1024 / 1024))MB)"
+        echo "  📁 Location: jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+    else
+        echo "  ⚠️  JDBC driver not found - some functionality may be limited"
+        echo "  💡 Run setup script again to download the driver"
+    fi
     echo ""
     print_info "Java Environment:"
     echo "  JAVA_HOME: $JAVA_HOME"
