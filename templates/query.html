@@ -197,7 +197,7 @@
                 <h3>📝 Example Queries</h3>
                 <p>Click on any example to load it into the editor:</p>
                 
-                <div class="example-query" onclick="loadExample('SELECT 1 \"test_value\", LOCALTIMESTAMP \"current_time\"')">
+                <div class="example-query" onclick="loadExample(`SELECT 1 &quot;test_value&quot;, LOCALTIMESTAMP &quot;current_time&quot;`)">
                     <strong>Simple Test Query</strong><br>
                     <code>SELECT 1 "test_value", LOCALTIMESTAMP "current_time"</code>
                 </div>
@@ -207,27 +207,27 @@
                     <code>SHOW SCHEMAS</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample('SELECT USER \"current_user\", LOCALTIMESTAMP \"current_time\"')">
+                <div class="example-query" onclick="loadExample(`SELECT USER &quot;current_user&quot;, LOCALTIMESTAMP &quot;current_time&quot;`)">
                     <strong>Current User and Time</strong><br>
                     <code>SELECT USER "current_user", LOCALTIMESTAMP "current_time"</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample('SELECT COUNT(*) \"total_schemas\" FROM INFORMATION_SCHEMA.SCHEMATA')">
+                <div class="example-query" onclick="loadExample(`SELECT COUNT(*) &quot;total_schemas&quot; FROM INFORMATION_SCHEMA.SCHEMATA`)">
                     <strong>Count Schemas</strong><br>
                     <code>SELECT COUNT(*) "total_schemas" FROM INFORMATION_SCHEMA.SCHEMATA</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample('SELECT SCHEMA_NAME \"schema_name\" FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10')">
+                <div class="example-query" onclick="loadExample(`SELECT SCHEMA_NAME &quot;schema_name&quot; FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10`)">
                     <strong>List Schema Names</strong><br>
                     <code>SELECT SCHEMA_NAME "schema_name" FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample('SELECT 1 \"number\", \'Hello Dremio\' \"message\", LOCALTIMESTAMP \"timestamp\"')">
+                <div class="example-query" onclick="loadExample(`SELECT 1 &quot;number&quot;, 'Hello Dremio' &quot;message&quot;, LOCALTIMESTAMP &quot;timestamp&quot;`)">
                     <strong>Mixed Data Types</strong><br>
                     <code>SELECT 1 "number", 'Hello Dremio' "message", LOCALTIMESTAMP "timestamp"</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample('SELECT SCHEMA_NAME \"schema\", CATALOG_NAME \"catalog\" FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE \'%sys%\' LIMIT 5')">
+                <div class="example-query" onclick="loadExample(`SELECT SCHEMA_NAME &quot;schema&quot;, CATALOG_NAME &quot;catalog&quot; FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE '%sys%' LIMIT 5`)">
                     <strong>Non-System Schemas</strong><br>
                     <code>SELECT SCHEMA_NAME "schema", CATALOG_NAME "catalog" FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE '%sys%' LIMIT 5</code>
                 </div>

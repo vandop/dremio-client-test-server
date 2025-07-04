@@ -404,9 +404,12 @@ def debug_reset_config():
 
 
 if __name__ == '__main__':
+    # Allow port override via environment variable
+    port = int(os.environ.get('PORT', Config.PORT))
+
     print("Starting Dremio Reporting Server...")
-    print(f"Server will be accessible at http://{Config.HOST}:{Config.PORT}")
-    
+    print(f"Server will be accessible at http://{Config.HOST}:{port}")
+
     # Check if Dremio configuration is available
     try:
         Config.validate_dremio_config()
@@ -414,9 +417,9 @@ if __name__ == '__main__':
     except ValueError as e:
         print(f"⚠ Warning: {e}")
         print("The server will start but Dremio features may not work.")
-    
+
     app.run(
         host=Config.HOST,
-        port=Config.PORT,
+        port=port,
         debug=Config.DEBUG
     )
