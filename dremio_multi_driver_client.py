@@ -296,6 +296,7 @@ class DremioMultiDriverClient:
         if not self.drivers['pyarrow_flight']['client']:
             self._create_pyarrow_flight_client()
 
+        # Add driver comment (PyArrow client will add its own comment)
         client = self.drivers['pyarrow_flight']['client']
         result = client.execute_query(sql)
 
@@ -313,9 +314,19 @@ class DremioMultiDriverClient:
         if not self.drivers['adbc_flight']['client']:
             self._create_adbc_flight_client()
 
+        # Add driver type and version as SQL comment
+        try:
+            import adbc_driver_flightsql
+            adbc_version = adbc_driver_flightsql.__version__
+        except:
+            adbc_version = "unknown"
+
+        driver_comment = f"/* Driver: ADBC Flight SQL v{adbc_version} */ "
+        commented_sql = driver_comment + sql
+
         connection = self.drivers['adbc_flight']['client']
         cursor = connection.cursor()
-        cursor.execute(sql)
+        cursor.execute(commented_sql)
 
         # Fetch results as PyArrow table
         import numpy as np
@@ -338,9 +349,19 @@ class DremioMultiDriverClient:
         if not self.drivers['pyodbc']['client']:
             self._create_pyodbc_client()
 
+        # Add driver type and version as SQL comment
+        try:
+            import pyodbc
+            pyodbc_version = pyodbc.version
+        except:
+            pyodbc_version = "unknown"
+
+        driver_comment = f"/* Driver: PyODBC v{pyodbc_version} */ "
+        commented_sql = driver_comment + sql
+
         connection = self.drivers['pyodbc']['client']
         cursor = connection.cursor()
-        cursor.execute(sql)
+        cursor.execute(commented_sql)
 
         # Fetch column names
         columns = [column[0] for column in cursor.description]
@@ -360,9 +381,19 @@ class DremioMultiDriverClient:
         if not self.drivers['jdbc']['client']:
             self._create_jdbc_client()
 
+        # Add driver type and version as SQL comment
+        try:
+            import jaydebeapi
+            jdbc_version = jaydebeapi.__version__
+        except:
+            jdbc_version = "unknown"
+
+        driver_comment = f"/* Driver: JDBC (JayDeBeApi) v{jdbc_version} */ "
+        commented_sql = driver_comment + sql
+
         connection = self.drivers['jdbc']['client']
         cursor = connection.cursor()
-        cursor.execute(sql)
+        cursor.execute(commented_sql)
 
         # Fetch column names
         columns = [desc[0] for desc in cursor.description]
