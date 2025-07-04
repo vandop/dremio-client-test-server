@@ -115,10 +115,10 @@ class DremioPyArrowClient:
     def execute_query(self, sql: str) -> Dict[str, Any]:
         """
         Execute a SQL query using PyArrow Flight.
-        
+
         Args:
             sql: SQL query to execute
-            
+
         Returns:
             Dictionary with query results
         """
@@ -132,12 +132,18 @@ class DremioPyArrowClient:
                     'message': 'No active connection to Dremio',
                     'connection_details': connect_result
                 }
-        
+
         try:
-            logger.info(f"Executing SQL query: {sql}")
-            
+            # Add driver type and version as SQL comment
+            import pyarrow
+            import pandas
+            driver_comment = f"/* Driver: PyArrow Flight SQL v{pyarrow.__version__} | Pandas v{pandas.__version__} */ "
+            commented_sql = driver_comment + sql
+
+            logger.info(f"Executing SQL query: {commented_sql}")
+
             # Create a FlightDescriptor for the SQL query
-            flight_desc = flight.FlightDescriptor.for_command(sql.encode('utf-8'))
+            flight_desc = flight.FlightDescriptor.for_command(commented_sql.encode('utf-8'))
             
             # Get flight info
             flight_info = self.client.get_flight_info(flight_desc, options=self.call_options)
