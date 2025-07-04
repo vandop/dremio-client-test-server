@@ -93,14 +93,15 @@ class DremioHybridClient:
     def execute_query(self, sql: str) -> Dict[str, Any]:
         """
         Execute SQL query using PyArrow Flight SQL.
-        
+
         Args:
             sql: SQL query to execute
-            
+
         Returns:
             Query results
         """
-        logger.info(f"Executing SQL query via Flight SQL: {sql}")
+        logger.info(f"Executing SQL query via Hybrid Client (Flight SQL): {sql}")
+        # The PyArrow Flight client will add its own driver comment
         return self.flight_client.execute_query(sql)
     
     def get_jobs(self, limit: int = 100) -> Dict[str, Any]:
