@@ -170,19 +170,44 @@ class DremioMultiDriverClient:
         if 'api.dremio.cloud' in host:
             host = 'data.dremio.cloud'
         
-        # Build connection string
-        if pat:
-            conn_str = f"DRIVER={{Dremio ODBC Driver}};HOST={host};PORT=443;SSL=1;AuthenticationType=Basic Authentication;UID=token;PWD={pat}"
-        else:
-            conn_str = f"DRIVER={{Dremio ODBC Driver}};HOST={host};PORT=443;SSL=1;AuthenticationType=Basic Authentication;UID={username};PWD={password}"
-        
-        try:
-            connection = pyodbc.connect(conn_str)
-            self.drivers['pyodbc']['client'] = connection
-            return connection
-        except Exception as e:
-            logger.warning(f"PyODBC connection failed (driver may not be installed): {e}")
-            raise
+        # Build connection string - try different driver names
+        driver_names = [
+            "Dremio Arrow Flight SQL ODBC Driver",  # New Arrow Flight SQL driver
+            "Dremio ODBC Driver",                   # Legacy driver name
+            "Arrow Flight SQL ODBC Driver"         # Alternative name
+        ]
+
+        # Try each driver name until one works
+        connection = None
+        last_error = None
+
+        for driver_name in driver_names:
+            try:
+                if pat:
+                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;SSL=1;AuthenticationType=Basic Authentication;UID=token;PWD={pat}"
+                else:
+                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;SSL=1;AuthenticationType=Basic Authentication;UID={username};PWD={password}"
+
+                connection = pyodbc.connect(conn_str)
+                logger.info(f"PyODBC connected successfully using driver: {driver_name}")
+                break
+
+            except Exception as e:
+                last_error = e
+                if 'file not found' in str(e):
+                    continue  # Try next driver name
+                else:
+                    # If it's not a "driver not found" error, break and report it
+                    break
+
+        if connection is None:
+            if last_error:
+                raise last_error
+            else:
+                raise Exception("No compatible ODBC driver found")
+
+        self.drivers['pyodbc']['client'] = connection
+        return connection
     
     def _create_jdbc_client(self):
         """Create JDBC client."""

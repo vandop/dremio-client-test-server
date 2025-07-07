@@ -233,6 +233,118 @@ except ImportError as e:
     fi
 }
 
+# Download and install Dremio ODBC driver
+install_dremio_odbc_driver() {
+    print_info "Downloading and installing Dremio ODBC driver..."
+
+    # Check if driver is already installed
+    if python3 -c "import pyodbc; drivers = pyodbc.drivers(); exit(0 if any('dremio' in d.lower() for d in drivers) else 1)" 2>/dev/null; then
+        print_status "Dremio ODBC driver already installed"
+        return 0
+    fi
+
+    # Create temporary directory for download
+    TEMP_DIR=$(mktemp -d)
+    cd "$TEMP_DIR"
+
+    print_info "Downloading Dremio Arrow Flight SQL ODBC driver..."
+
+    # Download the RPM package
+    DRIVER_URL="https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm"
+    DRIVER_FILE="arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm"
+
+    if command -v wget &> /dev/null; then
+        wget -O "$DRIVER_FILE" "$DRIVER_URL"
+    elif command -v curl &> /dev/null; then
+        curl -L -o "$DRIVER_FILE" "$DRIVER_URL"
+    else
+        print_error "Neither wget nor curl is available for downloading"
+        cd - > /dev/null
+        rm -rf "$TEMP_DIR"
+        return 1
+    fi
+
+    if [ ! -f "$DRIVER_FILE" ]; then
+        print_error "Failed to download Dremio ODBC driver"
+        cd - > /dev/null
+        rm -rf "$TEMP_DIR"
+        return 1
+    fi
+
+    print_status "Dremio ODBC driver downloaded successfully"
+
+    # Install alien if not present (for converting RPM to DEB)
+    if ! command -v alien &> /dev/null; then
+        print_info "Installing alien for RPM conversion..."
+        $SUDO apt install -y alien
+    fi
+
+    # Convert RPM to DEB and install
+    print_info "Converting RPM package to DEB format..."
+    $SUDO alien -d "$DRIVER_FILE"
+
+    # Find the generated DEB file
+    DEB_FILE=$(ls *.deb 2>/dev/null | head -n 1)
+
+    if [ -z "$DEB_FILE" ]; then
+        print_error "Failed to convert RPM to DEB format"
+        cd - > /dev/null
+        rm -rf "$TEMP_DIR"
+        return 1
+    fi
+
+    print_info "Installing Dremio ODBC driver..."
+    $SUDO dpkg -i "$DEB_FILE"
+
+    # Fix any dependency issues
+    $SUDO apt-get install -f -y
+
+    # Verify installation and find the actual library path
+    DRIVER_LIB=""
+    if [ -f "/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so.0.9.6.473" ]; then
+        DRIVER_LIB="/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so.0.9.6.473"
+    elif [ -f "/opt/arrow-flight-sql-odbc-driver/lib/libarrow-flight-sql-odbc.so" ]; then
+        DRIVER_LIB="/opt/arrow-flight-sql-odbc-driver/lib/libarrow-flight-sql-odbc.so"
+    else
+        # Try to find any arrow odbc library
+        DRIVER_LIB=$(find /opt/arrow-flight-sql-odbc-driver -name "libarrow*.so*" 2>/dev/null | head -n 1)
+    fi
+
+    if [ -n "$DRIVER_LIB" ] && [ -f "$DRIVER_LIB" ]; then
+        print_status "Dremio ODBC driver installed successfully"
+        print_info "Driver library found at: $DRIVER_LIB"
+
+        # Create a standard symlink for easier reference
+        $SUDO ln -sf "$DRIVER_LIB" "/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so"
+
+        # Configure ODBC driver
+        print_info "Configuring ODBC driver registration..."
+
+        # Create odbcinst.ini entry
+        $SUDO tee -a /etc/odbcinst.ini > /dev/null << EOF
+
+[Dremio Arrow Flight SQL ODBC Driver]
+Description=Dremio Arrow Flight SQL ODBC Driver
+Driver=$DRIVER_LIB
+Setup=$DRIVER_LIB
+UsageCount=1
+EOF
+
+        print_status "ODBC driver configured successfully"
+    else
+        print_error "Dremio ODBC driver installation failed - library not found"
+        cd - > /dev/null
+        rm -rf "$TEMP_DIR"
+        return 1
+    fi
+
+    # Cleanup
+    cd - > /dev/null
+    rm -rf "$TEMP_DIR"
+
+    print_status "Dremio ODBC driver installation completed"
+}
+
 # Test PyODBC installation
 test_pyodbc_installation() {
     print_info "Testing PyODBC installation..."
@@ -251,7 +363,14 @@ try:
 
     if not drivers:
         print('⚠ No ODBC drivers installed yet')
-        print('   Install Dremio ODBC driver to enable full functionality')
+        print('   Dremio ODBC driver will be installed automatically')
+    else:
+        # Check for Dremio driver specifically
+        dremio_drivers = [d for d in drivers if 'dremio' in d.lower() or 'arrow' in d.lower()]
+        if dremio_drivers:
+            print(f'✓ Dremio ODBC driver found: {dremio_drivers[0]}')
+        else:
+            print('⚠ Dremio ODBC driver not found in available drivers')
 
     print('✓ PyODBC installation test passed')
 
@@ -469,7 +588,8 @@ main() {
     test_java_integration
     test_pyodbc_installation
 
-    # Download JDBC driver
+    # Download and install drivers
+    install_dremio_odbc_driver
     download_jdbc_driver
 
     # Create test script
@@ -506,7 +626,7 @@ main() {
     print_info "Multi-Driver Support:"
     echo "  ✅ PyArrow Flight SQL (primary driver)"
     echo "  ✅ JDBC (via JayDeBeApi) - JAR file ready"
-    echo "  ✅ PyODBC - ready for Dremio ODBC driver"
+    echo "  ✅ PyODBC - Dremio ODBC driver installed"
     echo "  ⚠️ ADBC Flight SQL - incompatible with Dremio"
     echo ""
     print_info "For Docker deployment, see Dockerfile for container setup"
