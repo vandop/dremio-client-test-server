@@ -184,9 +184,12 @@ class DremioMultiDriverClient:
         for driver_name in driver_names:
             try:
                 if pat:
-                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;SSL=1;AuthenticationType=Basic Authentication;UID=token;PWD={pat}"
+                    # For PAT authentication: UID=username, PWD=personal_access_token
+                    # According to Dremio docs: "Pass a username and personal access token (PAT) with the UID and PWD properties"
+                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;useEncryption=true;UID={username};PWD={pat}"
                 else:
-                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;SSL=1;AuthenticationType=Basic Authentication;UID={username};PWD={password}"
+                    # For username/password authentication
+                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;useEncryption=true;UID={username};PWD={password}"
 
                 connection = pyodbc.connect(conn_str)
                 logger.info(f"PyODBC connected successfully using driver: {driver_name}")
