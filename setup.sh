@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # Enhanced Dremio Reporting Server Setup Script
-# This script sets up the complete environment including Java support
+# This script sets up the complete environment including Java and PyODBC support
 
 set -e  # Exit on any error
 
 echo "🚀 Enhanced Dremio Reporting Server Setup"
+echo "Java + PyODBC + Multi-Driver Support"
 echo "=========================================="
 
 # Colors for output
@@ -79,6 +80,33 @@ install_java() {
     print_status "Java installation verified"
 }
 
+# Install ODBC components for PyODBC
+install_odbc_components() {
+    print_info "Installing ODBC components for PyODBC..."
+
+    # Install unixODBC driver manager and tools
+    $SUDO apt install -y unixodbc unixodbc-dev odbcinst
+
+    # Verify installation
+    if command -v odbcinst &> /dev/null; then
+        print_status "unixODBC driver manager installed successfully"
+        print_info "ODBC Configuration:"
+        odbcinst -j | sed 's/^/   /'
+    else
+        print_error "unixODBC installation failed"
+        return 1
+    fi
+
+    # Check for ODBC configuration files
+    if [ -f "/etc/odbcinst.ini" ]; then
+        print_status "ODBC configuration files present"
+    else
+        print_warning "ODBC configuration files not found, creating basic structure..."
+        $SUDO touch /etc/odbcinst.ini
+        $SUDO touch /etc/odbc.ini
+    fi
+}
+
 # Install Python dependencies
 install_python_deps() {
     print_info "Installing Python dependencies..."
@@ -95,7 +123,7 @@ install_python_deps() {
         print_status "Python dependencies installed from requirements.txt"
     else
         print_warning "requirements.txt not found, installing core dependencies..."
-        pip install flask pyarrow pandas adbc-driver-flightsql jaydebeapi jpype1 requests python-dotenv
+        pip install flask pyarrow pandas adbc-driver-flightsql jaydebeapi jpype1 requests python-dotenv pyodbc
         print_status "Core Python dependencies installed"
     fi
 }
@@ -123,6 +151,14 @@ DEBUG=true
 
 # Java Configuration
 JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+
+# PyODBC Configuration
+PYODBC_DRIVER_NAME=Dremio ODBC Driver
+PYODBC_TIMEOUT=30
+
+# ODBC Environment
+ODBCSYSINI=/etc
+ODBCINI=/etc/odbc.ini
 EOF
         print_status ".env template created"
         print_warning "Please edit .env file with your Dremio credentials"
@@ -193,6 +229,44 @@ except ImportError as e:
         print_status "Java integration test passed"
     else
         print_error "Java integration test failed"
+        exit 1
+    fi
+}
+
+# Test PyODBC installation
+test_pyodbc_installation() {
+    print_info "Testing PyODBC installation..."
+
+    python3 -c "
+import sys
+try:
+    import pyodbc
+    print('✓ PyODBC imported successfully')
+    print(f'   Version: {pyodbc.version}')
+
+    drivers = pyodbc.drivers()
+    print(f'   Available ODBC drivers: {len(drivers)}')
+    for driver in drivers:
+        print(f'     - {driver}')
+
+    if not drivers:
+        print('⚠ No ODBC drivers installed yet')
+        print('   Install Dremio ODBC driver to enable full functionality')
+
+    print('✓ PyODBC installation test passed')
+
+except ImportError as e:
+    print(f'✗ PyODBC import failed: {e}')
+    sys.exit(1)
+except Exception as e:
+    print(f'✗ PyODBC test failed: {e}')
+    sys.exit(1)
+"
+
+    if [ $? -eq 0 ]; then
+        print_status "PyODBC installation test passed"
+    else
+        print_error "PyODBC installation test failed"
         exit 1
     fi
 }
@@ -383,15 +457,17 @@ main() {
     # Install system dependencies
     update_system
     install_java
-    
+    install_odbc_components
+
     # Install Python dependencies
     install_python_deps
-    
+
     # Set up environment
     setup_environment
-    
-    # Test Java integration
+
+    # Test integrations
     test_java_integration
+    test_pyodbc_installation
 
     # Download JDBC driver
     download_jdbc_driver
@@ -405,7 +481,8 @@ main() {
     print_info "Next steps:"
     echo "  1. Edit .env file with your Dremio credentials"
     echo "  2. Run: python test_java_setup.py (to verify Java setup)"
-    echo "  3. Run: python app.py (to start the server)"
+    echo "  3. Run: python test_pyodbc_installation.py (to verify PyODBC setup)"
+    echo "  4. Run: python app.py (to start the server)"
     echo ""
     print_info "JDBC Driver Status:"
     if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
@@ -420,6 +497,17 @@ main() {
     print_info "Java Environment:"
     echo "  JAVA_HOME: $JAVA_HOME"
     echo "  Java Version: $(java -version 2>&1 | head -n 1)"
+    echo ""
+    print_info "PyODBC Environment:"
+    echo "  unixODBC: $(odbcinst -j | grep 'unixODBC' | head -n 1)"
+    echo "  PyODBC: $(python3 -c 'import pyodbc; print(f"v{pyodbc.version}")' 2>/dev/null || echo 'Not available')"
+    echo "  ODBC Drivers: $(python3 -c 'import pyodbc; print(len(pyodbc.drivers()))' 2>/dev/null || echo '0') installed"
+    echo ""
+    print_info "Multi-Driver Support:"
+    echo "  ✅ PyArrow Flight SQL (primary driver)"
+    echo "  ✅ JDBC (via JayDeBeApi) - JAR file ready"
+    echo "  ✅ PyODBC - ready for Dremio ODBC driver"
+    echo "  ⚠️ ADBC Flight SQL - incompatible with Dremio"
     echo ""
     print_info "For Docker deployment, see Dockerfile for container setup"
 }
