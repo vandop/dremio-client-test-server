@@ -76,18 +76,24 @@ class DremioMultiDriverClient:
     
     def _check_jdbc(self) -> bool:
         """Check if JDBC (JayDeBeApi) is available."""
-        # JDBC driver temporarily disabled due to JVM crashes on macOS ARM64
-        # The issue appears to be a compatibility problem between JPype and macOS ARM64
-        # that causes SIGBUS errors during JVM initialization
-        logger.warning("JDBC driver disabled due to JVM compatibility issues on macOS ARM64")
-        logger.info("Alternative: Use PyArrow Flight SQL which provides excellent performance")
-        return False
-        # try:
-        #     import jaydebeapi
-        #     import jpype
-        #     return True
-        # except ImportError:
-        #     return False
+        try:
+            import jaydebeapi
+            import jpype
+            import os
+
+            # Check if JDBC driver file exists
+            jdbc_driver_path = "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+            if not os.path.exists(jdbc_driver_path):
+                logger.info("JDBC driver JAR file not found - run setup script to download")
+                return False
+
+            # Simple availability check - let the user decide when to use it
+            logger.info("JDBC driver available - dependencies and JAR file found")
+            return True
+
+        except ImportError as e:
+            logger.info(f"JDBC dependencies not available: {e}")
+            return False
     
     def get_available_drivers(self) -> Dict[str, Dict[str, Any]]:
         """Get list of available drivers."""
