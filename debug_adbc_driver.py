@@ -55,7 +55,7 @@ def test_adbc_connection():
             endpoint = dremio_url.replace('https://', 'grpc+tls://').replace('http://', 'grpc+tls://') + ':443'
         
         print(f"📡 Connecting to: {endpoint}")
-        
+
         # Create connection with basic configuration
         connection = flight_sql.connect(
             endpoint,
@@ -101,24 +101,10 @@ def test_simple_queries(connection):
                 arrow_table = cursor.fetch_arrow_table()
                 schema = arrow_table.schema
                 print(f"✅ Success - Schema: {schema}")
-                
+
                 # Convert to pandas and check data
                 df = arrow_table.to_pandas()
-                print(f"   Data shape: {df.shape}")
-                print(f"   Columns: {list(df.columns)}")
-                print(f"   Data types: {df.dtypes.to_dict()}")
-                
-                if len(df) > 0:
-                    print(f"   Sample data: {df.iloc[0].to_dict()}")
-                
-                results[sql] = {
-                    'success': True,
-                    'schema': str(schema),
-                    'shape': df.shape,
-                    'columns': list(df.columns),
-                    'dtypes': df.dtypes.to_dict()
-                }
-                
+
             except Exception as schema_error:
                 print(f"❌ Schema error: {schema_error}")
                 results[sql] = {
@@ -126,6 +112,23 @@ def test_simple_queries(connection):
                     'error': str(schema_error),
                     'error_type': 'schema_error'
                 }
+                continue
+
+            # Process successful results
+            print(f"   Data shape: {df.shape}")
+            print(f"   Columns: {list(df.columns)}")
+            print(f"   Data types: {df.dtypes.to_dict()}")
+
+            if len(df) > 0:
+                print(f"   Sample data: {df.iloc[0].to_dict()}")
+
+            results[sql] = {
+                'success': True,
+                'schema': str(schema),
+                'shape': df.shape,
+                'columns': list(df.columns),
+                'dtypes': df.dtypes.to_dict()
+            }
                 
         except Exception as e:
             print(f"❌ Query failed: {e}")

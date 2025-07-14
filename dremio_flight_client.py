@@ -69,13 +69,13 @@ class DremioFlightClient:
     def connect(self) -> Dict[str, Any]:
         """
         Establish connection to Dremio using Flight SQL.
-        
+
         Returns:
             Dictionary with connection status and details
         """
         try:
             logger.info("Connecting to Dremio using Flight SQL...")
-            
+
             # Prepare connection parameters for ADBC Flight SQL
             if self.pat:
                 # Use Personal Access Token
@@ -161,20 +161,20 @@ class DremioFlightClient:
                 sql = f"{sql} LIMIT {limit}"
             
             logger.info(f"Executing SQL query: {sql}")
-            
+
             # Execute query and fetch results
             cursor = self.connection.cursor()
             cursor.execute(sql)
-            
+
             # Fetch results as PyArrow table
             arrow_table = cursor.fetch_arrow_table()
-            
+
             # Convert to pandas DataFrame for easier handling
             df = arrow_table.to_pandas()
-            
+
             # Convert DataFrame to list of dictionaries
             data = df.to_dict('records')
-            
+
             logger.info(f"✓ Query executed successfully, returned {len(data)} rows")
             
             return {

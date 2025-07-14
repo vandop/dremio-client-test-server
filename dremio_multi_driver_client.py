@@ -76,12 +76,15 @@ class DremioMultiDriverClient:
     
     def _check_jdbc(self) -> bool:
         """Check if JDBC (JayDeBeApi) is available."""
-        try:
-            import jaydebeapi
-            import jpype
-            return True
-        except ImportError:
-            return False
+        # Temporarily disabled due to JVM crashes
+        logger.warning("JDBC driver temporarily disabled due to JVM stability issues")
+        return False
+        # try:
+        #     import jaydebeapi
+        #     import jpype
+        #     return True
+        # except ImportError:
+        #     return False
     
     def get_available_drivers(self) -> Dict[str, Dict[str, Any]]:
         """Get list of available drivers."""
@@ -115,19 +118,19 @@ class DremioMultiDriverClient:
         """Create ADBC Flight SQL client."""
         if not self.drivers['adbc_flight']['available']:
             raise ImportError("ADBC Flight SQL not available")
-        
+
         import adbc_driver_flightsql.dbapi as flight_sql
-        
+
         # Get configuration
         base_url = self._get_config_value('DREMIO_CLOUD_URL')
         pat = self._get_config_value('DREMIO_PAT')
-        
+
         # Convert URL to Flight endpoint
         if 'api.dremio.cloud' in base_url:
             endpoint = 'grpc+tls://data.dremio.cloud:443'
         else:
             endpoint = base_url.replace('https://', 'grpc+tls://').replace('http://', 'grpc+tls://') + ':443'
-        
+
         # Create connection
         if pat:
             connection = flight_sql.connect(
@@ -148,7 +151,7 @@ class DremioMultiDriverClient:
                     "adbc.flight.sql.client_option.tls_skip_verify": "false"
                 }
             )
-        
+
         self.drivers['adbc_flight']['client'] = connection
         return connection
     
@@ -352,7 +355,7 @@ class DremioMultiDriverClient:
             raise Exception(result['message'])
 
     def _execute_adbc_flight(self, sql: str) -> Dict[str, Any]:
-        """Execute query using ADBC Flight SQL with schema compatibility workaround."""
+        """Execute query using ADBC Flight SQL."""
         if not self.drivers['adbc_flight']['client']:
             self._create_adbc_flight_client()
 
@@ -370,87 +373,13 @@ class DremioMultiDriverClient:
         cursor = connection.cursor()
         cursor.execute(commented_sql)
 
-        # WORKAROUND: ADBC driver has schema inconsistency issues with Dremio
-        # Dremio returns nullable fields, but ADBC expects non-nullable
-        # Try multiple approaches to fetch data
-
-        import numpy as np
+        # Execute query and fetch results
         import pandas as pd
-
-        try:
-            # Attempt 1: Try fetch_arrow_table (will likely fail)
-            arrow_table = cursor.fetch_arrow_table()
-            df = arrow_table.to_pandas()
-
-        except Exception as arrow_error:
-            logger.warning(f"ADBC Arrow table fetch failed (expected): {arrow_error}")
-
-            try:
-                # Attempt 2: Try fetchall with manual conversion
-                logger.info("ADBC: Attempting fetchall workaround...")
-
-                # Get column information from cursor description
-                if hasattr(cursor, 'description') and cursor.description:
-                    columns = [desc[0] for desc in cursor.description]
-                else:
-                    # Fallback: try to infer from SQL
-                    columns = self._infer_columns_from_sql(sql)
-
-                # Fetch rows using fetchall
-                rows = cursor.fetchall()
-
-                # Convert to list of dictionaries
-                if rows and columns:
-                    data = [dict(zip(columns, row)) for row in rows]
-                    df = pd.DataFrame(data)
-                else:
-                    # Empty result
-                    df = pd.DataFrame()
-
-                logger.info(f"ADBC: Fetchall workaround successful, {len(df)} rows")
-
-            except Exception as fetchall_error:
-                logger.warning(f"ADBC fetchall workaround failed: {fetchall_error}")
-
-                try:
-                    # Attempt 3: Try fetchone in a loop
-                    logger.info("ADBC: Attempting fetchone workaround...")
-
-                    # Reset cursor
-                    cursor = connection.cursor()
-                    cursor.execute(commented_sql)
-
-                    # Get column information
-                    if hasattr(cursor, 'description') and cursor.description:
-                        columns = [desc[0] for desc in cursor.description]
-                    else:
-                        columns = self._infer_columns_from_sql(sql)
-
-                    # Fetch rows one by one
-                    rows = []
-                    while True:
-                        row = cursor.fetchone()
-                        if row is None:
-                            break
-                        rows.append(row)
-
-                    # Convert to DataFrame
-                    if rows and columns:
-                        data = [dict(zip(columns, row)) for row in rows]
-                        df = pd.DataFrame(data)
-                    else:
-                        df = pd.DataFrame()
-
-                    logger.info(f"ADBC: Fetchone workaround successful, {len(df)} rows")
-
-                except Exception as fetchone_error:
-                    logger.error(f"ADBC: All workarounds failed: {fetchone_error}")
-                    raise Exception(f"ADBC driver incompatible with Dremio schema. "
-                                  f"Arrow error: {arrow_error}. "
-                                  f"Fetchall error: {fetchall_error}. "
-                                  f"Fetchone error: {fetchone_error}")
+        arrow_table = cursor.fetch_arrow_table()
+        df = arrow_table.to_pandas()
 
         # Replace NaN values with None for JSON compatibility
+        import numpy as np
         if not df.empty:
             df = df.replace({np.nan: None})
             data = df.to_dict('records')
