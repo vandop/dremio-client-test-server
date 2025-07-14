@@ -39,5 +39,5 @@
     "mounts": [
         "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
     ],
-    "postCreateCommand": "echo 'DevContainer initialized successfully' && python3 --version && java -version"
+    "postCreateCommand": ".devcontainer/setup-devcontainer.sh"
 }

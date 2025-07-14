@@ -76,8 +76,11 @@ class DremioMultiDriverClient:
     
     def _check_jdbc(self) -> bool:
         """Check if JDBC (JayDeBeApi) is available."""
-        # Temporarily disabled due to JVM crashes
-        logger.warning("JDBC driver temporarily disabled due to JVM stability issues")
+        # JDBC driver temporarily disabled due to JVM crashes on macOS ARM64
+        # The issue appears to be a compatibility problem between JPype and macOS ARM64
+        # that causes SIGBUS errors during JVM initialization
+        logger.warning("JDBC driver disabled due to JVM compatibility issues on macOS ARM64")
+        logger.info("Alternative: Use PyArrow Flight SQL which provides excellent performance")
         return False
         # try:
         #     import jaydebeapi
