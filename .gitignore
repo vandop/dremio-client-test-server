@@ -120,3 +120,19 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# FUSE filesystem hidden files
+.fuse_hidden*
+
+# JAR extraction artifacts
+META-INF/
+com/
+jdbc-drivers/META-INF/
+
+# Temporary debug and test scripts
+debug_*.py
+fix_*.py
+test_ssl_*.py
+
+# JDBC SSL configuration cache
+.jdbc_ssl_config
