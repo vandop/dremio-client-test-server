@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
+# Install system dependencies including Java
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -15,7 +15,13 @@ RUN apt-get update && apt-get install -y \
     nano \
     wget \
     unzip \
+    sudo \
+    openjdk-17-jdk \
     && rm -rf /var/lib/apt/lists/*
+
+# Set JAVA_HOME environment variable
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
+ENV PATH=$JAVA_HOME/bin:$PATH
 
 # Create a non-root user
 RUN useradd --create-home --shell /bin/bash vscode \
