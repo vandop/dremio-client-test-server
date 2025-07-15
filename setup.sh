@@ -247,36 +247,76 @@ install_dremio_odbc_driver() {
     TEMP_DIR=$(mktemp -d)
     cd "$TEMP_DIR"
 
-    print_info "Downloading Dremio Arrow Flight SQL ODBC driver..."
+    print_info "Downloading Arrow Flight SQL ODBC driver from official Dremio source..."
+    print_info "Source: https://download.dremio.com/arrow-flight-sql-odbc-driver/"
 
-    # Download the RPM package
+    # Download the latest Arrow Flight SQL ODBC driver RPM package
     DRIVER_URL="https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm"
     DRIVER_FILE="arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm"
 
+    print_info "Downloading: $DRIVER_URL"
+
     if command -v wget &> /dev/null; then
-        wget -O "$DRIVER_FILE" "$DRIVER_URL"
+        if wget -q --show-progress -O "$DRIVER_FILE" "$DRIVER_URL"; then
+            print_status "Download completed successfully with wget"
+        else
+            print_error "Failed to download with wget"
+            cd - > /dev/null
+            rm -rf "$TEMP_DIR"
+            return 1
+        fi
     elif command -v curl &> /dev/null; then
-        curl -L -o "$DRIVER_FILE" "$DRIVER_URL"
+        if curl -L --progress-bar -o "$DRIVER_FILE" "$DRIVER_URL"; then
+            print_status "Download completed successfully with curl"
+        else
+            print_error "Failed to download with curl"
+            cd - > /dev/null
+            rm -rf "$TEMP_DIR"
+            return 1
+        fi
     else
         print_error "Neither wget nor curl is available for downloading"
+        print_info "Please install wget or curl: sudo apt-get install wget"
         cd - > /dev/null
         rm -rf "$TEMP_DIR"
         return 1
     fi
 
-    if [ ! -f "$DRIVER_FILE" ]; then
-        print_error "Failed to download Dremio ODBC driver"
+    # Verify download
+    if [ ! -f "$DRIVER_FILE" ] || [ ! -s "$DRIVER_FILE" ]; then
+        print_error "Downloaded file is missing or empty"
+        print_info "Please check your internet connection and try again"
         cd - > /dev/null
         rm -rf "$TEMP_DIR"
         return 1
     fi
 
-    print_status "Dremio ODBC driver downloaded successfully"
+    # Check file size (should be at least 1MB for a valid driver)
+    local file_size=$(stat -c%s "$DRIVER_FILE" 2>/dev/null || echo "0")
+    if [ "$file_size" -lt 1048576 ]; then
+        print_error "Downloaded file appears to be too small (${file_size} bytes)"
+        print_info "This might indicate a download error or network issue"
+        cd - > /dev/null
+        rm -rf "$TEMP_DIR"
+        return 1
+    fi
+
+    print_status "Arrow Flight SQL ODBC driver downloaded successfully (${file_size} bytes)"
 
     # Install alien if not present (for converting RPM to DEB)
     if ! command -v alien &> /dev/null; then
-        print_info "Installing alien for RPM conversion..."
-        $SUDO apt install -y alien
+        print_info "Installing alien package converter for RPM to DEB conversion..."
+        $SUDO apt-get update -qq
+        if $SUDO apt-get install -y alien; then
+            print_status "Alien package converter installed successfully"
+        else
+            print_error "Failed to install alien package converter"
+            cd - > /dev/null
+            rm -rf "$TEMP_DIR"
+            return 1
+        fi
+    else
+        print_status "Alien package converter already available"
     fi
 
     # Convert RPM to DEB and install
