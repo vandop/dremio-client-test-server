@@ -1,5 +1,6 @@
 # Enhanced Dremio Reporting Server Dockerfile with Java and PyODBC Support
-FROM python:3.11-slim
+# Force x86_64 architecture for ODBC driver compatibility
+FROM --platform=linux/amd64 python:3.11-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -30,6 +31,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     wget \
+    # RPM to DEB conversion tool for ODBC driver
+    alien \
     # Cleanup
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -42,19 +45,35 @@ RUN odbcinst -j
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Optional: Install Dremio ODBC driver (uncomment to enable)
-# Note: This requires the Dremio ODBC driver tar.gz file to be available
-# COPY dremio-odbc-*.tar.gz /tmp/
-# RUN cd /tmp && \
-#     tar -xzf dremio-odbc-*.tar.gz && \
-#     cd dremio-odbc-* && \
-#     cp lib64/libdrillodbc64.so /usr/lib/x86_64-linux-gnu/ && \
-#     echo '[Dremio ODBC Driver]\n\
-# Description=Dremio ODBC Driver\n\
-# Driver=/usr/lib/x86_64-linux-gnu/libdrillodbc64.so\n\
-# Setup=/usr/lib/x86_64-linux-gnu/libdrillodbc64.so\n\
-# UsageCount=1' > /etc/odbcinst.ini && \
-#     rm -rf /tmp/dremio-odbc-*
+# Install Dremio Arrow Flight SQL ODBC driver automatically
+RUN cd /tmp && \
+    # Download the latest Arrow Flight SQL ODBC driver
+    wget -q https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm && \
+    # Convert RPM to DEB and install
+    alien -d arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm && \
+    dpkg -i arrow-flight-sql-odbc-driver*.deb || apt-get install -f -y && \
+    # Find the driver library
+    DRIVER_LIB=$(find /opt -name "libarrow*.so*" 2>/dev/null | grep -E "(odbc|flight)" | head -1) && \
+    # Register the ODBC driver
+    if [ -n "$DRIVER_LIB" ] && [ -f "$DRIVER_LIB" ]; then \
+        echo "[Arrow Flight SQL ODBC Driver]" >> /etc/odbcinst.ini && \
+        echo "Description=Arrow Flight SQL ODBC Driver" >> /etc/odbcinst.ini && \
+        echo "Driver=$DRIVER_LIB" >> /etc/odbcinst.ini && \
+        echo "Setup=$DRIVER_LIB" >> /etc/odbcinst.ini && \
+        echo "UsageCount=1" >> /etc/odbcinst.ini && \
+        echo "" >> /etc/odbcinst.ini; \
+    fi && \
+    # Create sample DSN configuration
+    echo "[Dremio Cloud Flight SQL]" >> /etc/odbc.ini && \
+    echo "Description=Dremio Cloud via Arrow Flight SQL ODBC" >> /etc/odbc.ini && \
+    echo "Driver=Arrow Flight SQL ODBC Driver" >> /etc/odbc.ini && \
+    echo "HOST=data.dremio.cloud" >> /etc/odbc.ini && \
+    echo "PORT=443" >> /etc/odbc.ini && \
+    echo "useEncryption=true" >> /etc/odbc.ini && \
+    echo "TOKEN=your_personal_access_token_here" >> /etc/odbc.ini && \
+    echo "" >> /etc/odbc.ini && \
+    # Cleanup
+    rm -rf /tmp/arrow-flight-sql-odbc-driver*
 
 # Copy application code
 COPY . .

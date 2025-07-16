@@ -5,7 +5,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Force x86_64 architecture for ODBC driver compatibility
+      platforms:
+        - linux/amd64
     container_name: dremio-reporting-server
+    # Force platform for container runtime
+    platform: linux/amd64
     ports:
       - "5000:5000"
     volumes:
@@ -17,6 +22,10 @@ services:
       # Java Environment for JDBC support
       - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
       - PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+
+      # ODBC Environment for PyODBC support
+      - ODBCSYSINI=/etc
+      - ODBCINI=/etc/odbc.ini
 
       # Flask Configuration
       - FLASK_DEBUG=true
