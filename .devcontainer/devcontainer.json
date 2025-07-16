@@ -1,13 +1,16 @@
 {
-    "name": "Dremio Reporting Server",
+    "name": "Enhanced Dremio Reporting Server (x86_64)",
     "build": {
         "dockerfile": "Dockerfile",
-        "context": ".."
+        "context": "..",
+        "options": [
+            "--platform=linux/amd64"
+        ]
     },
+    "runArgs": [
+        "--platform=linux/amd64"
+    ],
     "features": {
-        "ghcr.io/devcontainers/features/python:1": {
-            "version": "3.11"
-        },
         "ghcr.io/devcontainers/features/git:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {}
     },
@@ -15,43 +18,33 @@
         "vscode": {
             "extensions": [
                 "ms-python.python",
-                "ms-python.flake8",
                 "ms-python.black-formatter",
                 "ms-toolsai.jupyter",
                 "ms-vscode.vscode-json",
-                "bradlc.vscode-tailwindcss",
-                "formulahendry.auto-rename-tag",
-                "esbenp.prettier-vscode",
-                "augmentcode.augment"
+                "augment.vscode-augment"
             ],
             "settings": {
-                "python.defaultInterpreterPath": "/usr/local/bin/python",
-                "python.linting.enabled": true,
-                "python.linting.flake8Enabled": true,
-                "python.formatting.provider": "black",
-                "python.formatting.blackArgs": ["--line-length=88"],
-                "editor.formatOnSave": true,
-                "editor.codeActionsOnSave": {
-                    "source.organizeImports": true
+                "python.defaultInterpreterPath": "/usr/local/bin/python3",
+                "[python]": {
+                    "editor.defaultFormatter": "ms-python.black-formatter"
                 },
-                "files.exclude": {
-                    "**/__pycache__": true,
-                    "**/*.pyc": true
-                }
+                "editor.formatOnSave": true
             }
         }
     },
-    "forwardPorts": [5000],
+    "forwardPorts": [
+        5000
+    ],
     "portsAttributes": {
         "5000": {
             "label": "Flask App",
             "onAutoForward": "notify"
         }
     },
-    "postCreateCommand": "pip install -r requirements.txt",
     "remoteUser": "vscode",
     "workspaceFolder": "/workspace",
     "mounts": [
         "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
-    ]
+    ],
+    "postCreateCommand": ".devcontainer/setup-devcontainer.sh"
 }

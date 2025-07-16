@@ -4,7 +4,7 @@ services:
   dremio-reporting-server:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: .devcontainer/Dockerfile
       # Force x86_64 architecture for ODBC driver compatibility
       platforms:
         - linux/amd64

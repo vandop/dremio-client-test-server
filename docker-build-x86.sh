@@ -73,6 +73,7 @@ if [ "$USE_BUILDX" = true ]; then
     # Build with buildx
     docker buildx build \
         --platform linux/amd64 \
+        --file .devcontainer/Dockerfile \
         --tag "$FULL_IMAGE_NAME" \
         --load \
         .
@@ -82,6 +83,7 @@ else
     # Build with standard docker build
     docker build \
         --platform linux/amd64 \
+        --file .devcontainer/Dockerfile \
         --tag "$FULL_IMAGE_NAME" \
         .
 fi
