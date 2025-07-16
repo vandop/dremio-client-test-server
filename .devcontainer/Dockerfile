@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Java environment variables
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/default-java
 ENV PATH=$JAVA_HOME/bin:$PATH
 
 # ODBC environment variables
@@ -26,9 +26,12 @@ RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     sudo \
+    ca-certificates \
+    gnupg \
+    lsb-release \
     # Java Development Kit for JDBC driver support
-    openjdk-11-jdk \
-    openjdk-11-jre \
+    default-jdk \
+    default-jre \
     # ODBC components for PyODBC
     unixodbc \
     unixodbc-dev \
@@ -36,6 +39,15 @@ RUN apt-get update && apt-get install -y \
     # RPM to DEB conversion tool for ODBC driver
     alien \
     # Cleanup
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install gh -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -54,12 +66,12 @@ RUN cd /tmp && \
     DRIVER_LIB=$(find /opt -name "libarrow*.so*" 2>/dev/null | grep -E "(odbc|flight)" | head -1) && \
     # Register the ODBC driver
     if [ -n "$DRIVER_LIB" ] && [ -f "$DRIVER_LIB" ]; then \
-        echo "[Arrow Flight SQL ODBC Driver]" >> /etc/odbcinst.ini && \
-        echo "Description=Arrow Flight SQL ODBC Driver" >> /etc/odbcinst.ini && \
-        echo "Driver=$DRIVER_LIB" >> /etc/odbcinst.ini && \
-        echo "Setup=$DRIVER_LIB" >> /etc/odbcinst.ini && \
-        echo "UsageCount=1" >> /etc/odbcinst.ini && \
-        echo "" >> /etc/odbcinst.ini; \
+    echo "[Arrow Flight SQL ODBC Driver]" >> /etc/odbcinst.ini && \
+    echo "Description=Arrow Flight SQL ODBC Driver" >> /etc/odbcinst.ini && \
+    echo "Driver=$DRIVER_LIB" >> /etc/odbcinst.ini && \
+    echo "Setup=$DRIVER_LIB" >> /etc/odbcinst.ini && \
+    echo "UsageCount=1" >> /etc/odbcinst.ini && \
+    echo "" >> /etc/odbcinst.ini; \
     fi && \
     # Create sample DSN configuration
     echo "[Dremio Cloud Flight SQL]" >> /etc/odbc.ini && \

@@ -105,6 +105,11 @@ class DremioPyArrowClient:
                 'success': False,
                 'error_type': 'connection_failed',
                 'message': f'Failed to connect to Dremio Flight: {str(e)}',
+                'error_details': {
+                    'type': type(e).__name__,
+                    'full_error': str(e),
+                    'endpoint': self.flight_endpoint
+                },
                 'suggestions': [
                     'Check your network connection',
                     'Verify the Flight endpoint is accessible',
@@ -145,12 +150,17 @@ class DremioPyArrowClient:
             # Create a FlightDescriptor for the SQL query
             flight_desc = flight.FlightDescriptor.for_command(commented_sql.encode('utf-8'))
             
+            logger.info(f"✓ Flight_decriptor created successfully")
+            
             # Get flight info
             flight_info = self.client.get_flight_info(flight_desc, options=self.call_options)
-            
+                
+            logger.info(f"✓ Flight info retrieved successfully")
+
             # Get the data from the first endpoint
             if flight_info.endpoints:
                 endpoint = flight_info.endpoints[0]
+                logger.info(f"✓ Flight info retrieved successfully, {endpoint}")
                 flight_reader = self.client.do_get(endpoint.ticket, options=self.call_options)
                 
                 # Read all batches and convert to table
@@ -190,7 +200,7 @@ class DremioPyArrowClient:
                 'success': False,
                 'data': [],
                 'error_type': 'query_failed',
-                'message': f'Query execution failed: {str(e)}',
+                'message': f'Query execution failed: {str(e)} | Server response: {getattr(e, "response", "No server response")} | Error details: {getattr(e, "details", "No additional details")}',
                 'query': sql,
                 'suggestions': [
                     'Check SQL syntax',
