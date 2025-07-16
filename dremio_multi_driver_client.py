@@ -2,6 +2,7 @@
 Multi-driver Dremio client supporting PyArrow Flight, ADBC, PyODBC, and JDBC.
 """
 import logging
+import os
 import time
 from typing import Dict, List, Optional, Any, Union
 import pandas as pd
@@ -170,29 +171,91 @@ class DremioMultiDriverClient:
         if 'api.dremio.cloud' in host:
             host = 'data.dremio.cloud'
         
-        # Build connection string - try different driver names
+        # Build connection string - try different driver paths and names
+        # First, try to find the actual driver library path
+        import subprocess
+
+        driver_configs = []
+
+        # Method 1: Try to find driver library paths
+        try:
+            import glob
+
+            # Look for Arrow Flight SQL ODBC driver library with version numbers
+            search_patterns = [
+                "/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so*",  # Primary location with version
+                "/opt/arrow-flight-sql-odbc-driver/lib/libarrow-odbc.so*",   # Alternative lib directory
+                "/usr/lib/x86_64-linux-gnu/libarrow-odbc.so*",               # System lib directory
+                "/usr/local/lib/libarrow-odbc.so*"                           # Local lib directory
+            ]
+
+            logger.info(f"Searching for ODBC driver libraries in {len(search_patterns)} locations...")
+
+            for pattern in search_patterns:
+                logger.debug(f"Checking pattern: {pattern}")
+                matching_files = glob.glob(pattern)
+                if matching_files:
+                    # Use the first matching file (usually the one with version number)
+                    driver_path = matching_files[0]
+                    driver_configs.append({
+                        "type": "path",
+                        "value": driver_path,
+                        "description": f"Direct library path: {driver_path}"
+                    })
+                    logger.info(f"✅ Found ODBC driver library: {driver_path}")
+                    logger.info(f"   All matches for pattern: {matching_files}")
+                    break
+                else:
+                    logger.debug(f"   No matches for pattern: {pattern}")
+
+            if not driver_configs:
+                logger.warning("No ODBC driver library files found in standard locations")
+
+        except Exception as e:
+            logger.warning(f"Could not check driver library paths: {e}")
+
+        # Method 2: Try driver names (fallback)
         driver_names = [
-            "Dremio Arrow Flight SQL ODBC Driver",  # New Arrow Flight SQL driver
-            "Dremio ODBC Driver",                   # Legacy driver name
-            "Arrow Flight SQL ODBC Driver"         # Alternative name
+            "Arrow Flight SQL ODBC Driver",         # Most common name
+            "Dremio Arrow Flight SQL ODBC Driver",  # Alternative name
+            "Dremio ODBC Driver"                    # Legacy driver name
         ]
 
-        # Try each driver name until one works
+        for driver_name in driver_names:
+            driver_configs.append({
+                "type": "name",
+                "value": driver_name,
+                "description": f"Driver name: {driver_name}"
+            })
+
+        # Log all driver configurations that will be tried
+        logger.info(f"Will try {len(driver_configs)} driver configurations:")
+        for i, config in enumerate(driver_configs, 1):
+            logger.info(f"  {i}. {config['description']}")
+
+        # Try each driver configuration until one works
         connection = None
         last_error = None
 
-        for driver_name in driver_names:
+        for config in driver_configs:
             try:
+                driver_identifier = config["value"]
+                config_type = config["type"]
+                description = config["description"]
+
+                logger.info(f"Trying PyODBC connection with: {description}")
+
                 if pat:
                     # For Arrow Flight SQL ODBC driver with PAT: use TOKEN parameter
                     # According to official Dremio docs: "For TOKEN, specify a personal access token"
-                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;useEncryption=true;TOKEN={pat}"
+                    conn_str = f"DRIVER={driver_identifier};HOST={host};PORT=443;useEncryption=true;TOKEN={pat}"
                 else:
-                    # For username/password authentication (fallback for legacy drivers)
-                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;useEncryption=true;UID={username};PWD={password}"
+                    conn_str = f"DRIVER={driver_identifier};HOST={host};PORT=443;UseEncryption=true;disableCertificateVerification=true;UID={username};PWD={password}"
 
-                connection = pyodbc.connect(conn_str)
-                logger.info(f"PyODBC connected successfully using driver: {driver_name}")
+                # Connect with autocommit disabled to avoid SQLSetConnectAttr issues
+                logger.info(f"Trying connection string: {conn_str}")
+                connection = pyodbc.connect(conn_str, autocommit=True)
+                logger.info(f"PyODBC connected successfully using: {description}")
                 break
 
             except Exception as e:
