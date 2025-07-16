@@ -159,15 +159,13 @@ Or test manually:
 ```python
 import pyodbc
 
-# Connection string for Dremio Cloud
+# Connection string for Arrow Flight SQL ODBC Driver
 conn_str = (
-    "DRIVER={Dremio ODBC Driver};"
+    "DRIVER={Arrow Flight SQL ODBC Driver};"
     "HOST=data.dremio.cloud;"
     "PORT=443;"
-    "SSL=1;"
-    "AuthenticationType=Basic Authentication;"
-    "UID=token;"  # Use 'token' for PAT authentication
-    "PWD=your-personal-access-token"
+    "useEncryption=true;"
+    "TOKEN=your-personal-access-token"  # Use TOKEN parameter for PAT authentication
 )
 
 try:
@@ -272,26 +270,23 @@ PYODBC_TIMEOUT=30
 The PyODBC driver supports various connection options:
 
 ```python
-# PAT Authentication (Recommended)
+# PAT Authentication (Recommended) - Arrow Flight SQL ODBC Driver
 conn_str = (
-    "DRIVER={Dremio ODBC Driver};"
+    "DRIVER={Arrow Flight SQL ODBC Driver};"
     "HOST=data.dremio.cloud;"
     "PORT=443;"
-    "SSL=1;"
-    "AuthenticationType=Basic Authentication;"
-    "UID=token;"
-    "PWD=your-personal-access-token;"
+    "useEncryption=true;"
+    "TOKEN=your-personal-access-token;"
     "ConnectionTimeout=30;"
     "QueryTimeout=300"
 )
 
-# Username/Password Authentication
+# Username/Password Authentication (Legacy drivers only)
 conn_str = (
     "DRIVER={Dremio ODBC Driver};"
     "HOST=data.dremio.cloud;"
     "PORT=443;"
-    "SSL=1;"
-    "AuthenticationType=Basic Authentication;"
+    "useEncryption=true;"
     "UID=your-username;"
     "PWD=your-password"
 )

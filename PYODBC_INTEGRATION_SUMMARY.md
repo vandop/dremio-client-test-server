@@ -42,11 +42,11 @@ Priority Order:
 
 ### **PyODBC Connection Configuration**
 ```python
-# Personal Access Token (Recommended)
+# Personal Access Token (Recommended) - Arrow Flight SQL ODBC Driver
 DRIVER={Arrow Flight SQL ODBC Driver};HOST=data.dremio.cloud;PORT=443;useEncryption=true;TOKEN=your_pat_token
 
-# Username/Password (Fallback)
-DRIVER={Arrow Flight SQL ODBC Driver};HOST=data.dremio.cloud;PORT=443;useEncryption=true;UID=username;PWD=password
+# Username/Password (Legacy drivers only)
+DRIVER={Dremio ODBC Driver};HOST=data.dremio.cloud;PORT=443;useEncryption=true;UID=username;PWD=password
 ```
 
 ### **Automatic Installation Process**
@@ -85,11 +85,11 @@ def _check_pyodbc(self) -> bool:
 ### **Connection String Builder**
 ```python
 if pat:
-    # Use Personal Access Token authentication (recommended)
+    # Use Personal Access Token authentication (recommended) - Arrow Flight SQL ODBC Driver
     conn_str = f"DRIVER={{Arrow Flight SQL ODBC Driver}};HOST={host};PORT=443;useEncryption=true;TOKEN={pat}"
 else:
-    # Use username/password authentication (fallback)
-    conn_str = f"DRIVER={{Arrow Flight SQL ODBC Driver}};HOST={host};PORT=443;useEncryption=true;UID={username};PWD={password}"
+    # Use username/password authentication (legacy drivers only)
+    conn_str = f"DRIVER={{Dremio ODBC Driver}};HOST={host};PORT=443;useEncryption=true;UID={username};PWD={password}"
 ```
 
 ### **Automatic Driver Installation**

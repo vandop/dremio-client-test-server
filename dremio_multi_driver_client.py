@@ -184,11 +184,11 @@ class DremioMultiDriverClient:
         for driver_name in driver_names:
             try:
                 if pat:
-                    # For PAT authentication: UID=username, PWD=personal_access_token
-                    # According to Dremio docs: "Pass a username and personal access token (PAT) with the UID and PWD properties"
-                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;useEncryption=true;UID={username};PWD={pat}"
+                    # For Arrow Flight SQL ODBC driver with PAT: use TOKEN parameter
+                    # According to official Dremio docs: "For TOKEN, specify a personal access token"
+                    conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;useEncryption=true;TOKEN={pat}"
                 else:
-                    # For username/password authentication
+                    # For username/password authentication (fallback for legacy drivers)
                     conn_str = f"DRIVER={{{driver_name}}};HOST={host};PORT=443;useEncryption=true;UID={username};PWD={password}"
 
                 connection = pyodbc.connect(conn_str)

@@ -196,15 +196,14 @@ def test_pyodbc_connection():
         else:
             host = dremio_url.replace('https://', '').replace('http://', '')
         
-        # Build connection string
+        # Build connection string for Arrow Flight SQL ODBC driver
+        # According to official Dremio docs: use TOKEN parameter for PAT authentication
         conn_str = (
             f"DRIVER={{{dremio_driver}}};"
             f"HOST={host};"
             "PORT=443;"
-            "SSL=1;"
-            "AuthenticationType=Basic Authentication;"
-            "UID=token;"
-            f"PWD={dremio_pat};"
+            "useEncryption=true;"
+            f"TOKEN={dremio_pat};"
             "ConnectionTimeout=30;"
             "QueryTimeout=300"
         )
