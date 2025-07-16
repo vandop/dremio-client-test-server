@@ -61,16 +61,53 @@ def test_pyodbc_token_auth():
     
     try:
         # Build connection string with TOKEN parameter
-        conn_str = f"DRIVER={{{arrow_driver}}};HOST={host};PORT=443;useEncryption=true;TOKEN={pat}"
-        print(f"Connection string: DRIVER={{{arrow_driver}}};HOST={host};PORT=443;useEncryption=true;TOKEN=***")
+        conn_str = f"DRIVER=/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so.0.9.6.473;HOST={host};PORT=443;useEncryption=true;TOKEN={pat}"
+        #conn_str = f"DRIVER=/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so.0.9.6.473;HOST={host};PORT=443;useEncryption=true;TOKEN={pat}"
+
+        # conn_str = (
+        #     "Driver={/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so.0.9.6.473};"
+        #     "host=data.eu.dremio.cloud;"
+        #     "port=443;"
+        #     "ssl=1;"
+        #     "UseEncryption=true;"
+        #     "disableCertificateVerification=true;"
+        #     f"token={pat};"
+        # )
+        print(f"Connection string: {conn_str}")
         
-        # Attempt connection
-        connection = pyodbc.connect(conn_str)
-        print("✅ PyODBC connection successful with TOKEN authentication!")
+        # Attempt connection - try different approaches for Arrow Flight SQL ODBC driver
+        connection = None
+
+        # Method 1: Try with autocommit=False
+        try:
+            connection = pyodbc.connect(conn_str, autocommit=True)
+            print("✅ PyODBC connection successful with TOKEN authentication (autocommit=True)!")
+        except Exception as e1:
+            print(f"⚠️ Connection with autocommit=False failed: {e1}")
+
+            # Method 2: Try without autocommit parameter
+            try:
+                connection = pyodbc.connect(conn_str)
+                print("✅ PyODBC connection successful with TOKEN authentication (default settings)!")
+            except Exception as e2:
+                print(f"⚠️ Connection with default settings failed: {e2}")
+
+                # Method 3: Try with specific connection attributes
+                try:
+                    # Some ODBC drivers have issues with certain attributes
+                    # Let's try connecting and then setting attributes manually
+                    connection = pyodbc.connect(conn_str, attrs_before={})
+                    print("✅ PyODBC connection successful with TOKEN authentication (no attrs)!")
+                except Exception as e3:
+                    print(f"❌ All connection methods failed. Last error: {e3}")
+                    raise e3
+
+        if not connection:
+            raise Exception("Failed to establish connection with any method")
         
         # Test a simple query
         cursor = connection.cursor()
-        cursor.execute("SELECT 1 as test_value")
+        cursor.execute("/* Driver: PyODBC */ SELECT 1 as test_value")
         result = cursor.fetchone()
         
         if result and result[0] == 1:
