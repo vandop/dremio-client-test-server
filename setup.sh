@@ -1,12 +1,11 @@
 #!/bin/bash
 
 # Enhanced Dremio Reporting Server Setup Script
-# This script sets up the complete environment including Java and PyODBC support
+# Downloads Arrow Flight SQL JDBC driver
 
 set -e  # Exit on any error
 
 echo "🚀 Enhanced Dremio Reporting Server Setup"
-echo "Java + PyODBC + Multi-Driver Support"
 echo "=========================================="
 
 # Colors for output
@@ -51,388 +50,16 @@ check_sudo() {
     fi
 }
 
-# Update system packages
-update_system() {
-    print_info "Updating system packages..."
-    $SUDO apt update -qq
-    print_status "System packages updated"
+# Update JDBC README with current driver information
+update_jdbc_readme() {
+    print_info "Updating JDBC README documentation..."
+    # The README has already been updated to reflect Arrow Flight SQL JDBC driver
+    print_status "JDBC README is up to date"
 }
 
-# Install Java (OpenJDK 11)
-install_java() {
-    print_info "Checking Java installation..."
-    
-    if command -v java &> /dev/null; then
-        JAVA_VERSION=$(java -version 2>&1 | head -n 1 | cut -d'"' -f2)
-        print_status "Java already installed: $JAVA_VERSION"
-    else
-        print_info "Installing OpenJDK 11..."
-        $SUDO apt install -y openjdk-11-jdk openjdk-11-jre
-        print_status "OpenJDK 11 installed successfully"
-    fi
-    
-    # Set JAVA_HOME
-    export JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"
-    
-    # Verify installation
-    java -version
-    javac -version
-    print_status "Java installation verified"
-}
-
-# Install ODBC components for PyODBC
-install_odbc_components() {
-    print_info "Installing ODBC components for PyODBC..."
-
-    # Install unixODBC driver manager and tools
-    $SUDO apt install -y unixodbc unixodbc-dev odbcinst
-
-    # Verify installation
-    if command -v odbcinst &> /dev/null; then
-        print_status "unixODBC driver manager installed successfully"
-        print_info "ODBC Configuration:"
-        odbcinst -j | sed 's/^/   /'
-    else
-        print_error "unixODBC installation failed"
-        return 1
-    fi
-
-    # Check for ODBC configuration files
-    if [ -f "/etc/odbcinst.ini" ]; then
-        print_status "ODBC configuration files present"
-    else
-        print_warning "ODBC configuration files not found, creating basic structure..."
-        $SUDO touch /etc/odbcinst.ini
-        $SUDO touch /etc/odbc.ini
-    fi
-}
-
-# Install Python dependencies
-install_python_deps() {
-    print_info "Installing Python dependencies..."
-    
-    # Check if pip is available
-    if ! command -v pip &> /dev/null; then
-        print_info "Installing pip..."
-        $SUDO apt install -y python3-pip
-    fi
-    
-    # Install requirements
-    if [ -f "requirements.txt" ]; then
-        pip install -r requirements.txt
-        print_status "Python dependencies installed from requirements.txt"
-    else
-        print_warning "requirements.txt not found, installing core dependencies..."
-        pip install flask pyarrow pandas adbc-driver-flightsql jaydebeapi jpype1 requests python-dotenv pyodbc
-        print_status "Core Python dependencies installed"
-    fi
-}
-
-# Set up environment variables
-setup_environment() {
-    print_info "Setting up environment variables..."
-    
-    # Create .env file if it doesn't exist
-    if [ ! -f ".env" ]; then
-        print_info "Creating .env template..."
-        cat > .env << 'EOF'
-# Dremio Configuration
-DREMIO_URL=https://api.dremio.cloud
-DREMIO_TYPE=cloud
-DREMIO_USERNAME=your-username
-DREMIO_PASSWORD=your-password
-DREMIO_PAT=your-personal-access-token
-DREMIO_PROJECT_ID=your-project-id
-
-# Server Configuration
-HOST=0.0.0.0
-PORT=5000
-DEBUG=true
-
-# Java Configuration
-JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-
-# PyODBC Configuration
-PYODBC_DRIVER_NAME=Dremio ODBC Driver
-PYODBC_TIMEOUT=30
-
-# ODBC Environment
-ODBCSYSINI=/etc
-ODBCINI=/etc/odbc.ini
-EOF
-        print_status ".env template created"
-        print_warning "Please edit .env file with your Dremio credentials"
-    else
-        print_status ".env file already exists"
-    fi
-    
-    # Add JAVA_HOME to current session
-    export JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"
-    
-    # Add to shell profile for persistence
-    SHELL_PROFILE=""
-    if [ -f "$HOME/.bashrc" ]; then
-        SHELL_PROFILE="$HOME/.bashrc"
-    elif [ -f "$HOME/.zshrc" ]; then
-        SHELL_PROFILE="$HOME/.zshrc"
-    elif [ -f "$HOME/.profile" ]; then
-        SHELL_PROFILE="$HOME/.profile"
-    fi
-    
-    if [ -n "$SHELL_PROFILE" ]; then
-        if ! grep -q "JAVA_HOME" "$SHELL_PROFILE"; then
-            echo "" >> "$SHELL_PROFILE"
-            echo "# Java Environment (added by Dremio Reporting Server setup)" >> "$SHELL_PROFILE"
-            echo "export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> "$SHELL_PROFILE"
-            echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> "$SHELL_PROFILE"
-            print_status "JAVA_HOME added to $SHELL_PROFILE"
-        else
-            print_status "JAVA_HOME already configured in shell profile"
-        fi
-    fi
-}
-
-# Test Java integration with Python
-test_java_integration() {
-    print_info "Testing Java integration with Python..."
-    
-    python3 -c "
-import sys
-try:
-    import jpype
-    print('✓ JPype (Java-Python bridge) available')
-    
-    # Test Java environment
-    import os
-    java_home = os.environ.get('JAVA_HOME', '/usr/lib/jvm/java-11-openjdk-amd64')
-    if os.path.exists(java_home):
-        print(f'✓ JAVA_HOME found: {java_home}')
-    else:
-        print(f'✗ JAVA_HOME not found: {java_home}')
-        sys.exit(1)
-        
-    # Test JayDeBeApi (JDBC driver)
-    try:
-        import jaydebeapi
-        print(f'✓ JayDeBeApi available: v{jaydebeapi.__version__}')
-    except ImportError:
-        print('⚠ JayDeBeApi not available (install with: pip install jaydebeapi)')
-    
-    print('✓ Java integration test passed')
-    
-except ImportError as e:
-    print(f'✗ Java integration test failed: {e}')
-    sys.exit(1)
-"
-    
-    if [ $? -eq 0 ]; then
-        print_status "Java integration test passed"
-    else
-        print_error "Java integration test failed"
-        exit 1
-    fi
-}
-
-# Download and install Dremio ODBC driver
-install_dremio_odbc_driver() {
-    print_info "Downloading and installing Dremio ODBC driver..."
-
-    # Check if driver is already installed
-    if python3 -c "import pyodbc; drivers = pyodbc.drivers(); exit(0 if any('dremio' in d.lower() for d in drivers) else 1)" 2>/dev/null; then
-        print_status "Dremio ODBC driver already installed"
-        return 0
-    fi
-
-    # Create temporary directory for download
-    TEMP_DIR=$(mktemp -d)
-    cd "$TEMP_DIR"
-
-    print_info "Downloading Arrow Flight SQL ODBC driver from official Dremio source..."
-    print_info "Source: https://download.dremio.com/arrow-flight-sql-odbc-driver/"
-
-    # Download the latest Arrow Flight SQL ODBC driver RPM package
-    DRIVER_URL="https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm"
-    DRIVER_FILE="arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm"
-
-    print_info "Downloading: $DRIVER_URL"
-
-    if command -v wget &> /dev/null; then
-        if wget -q --show-progress -O "$DRIVER_FILE" "$DRIVER_URL"; then
-            print_status "Download completed successfully with wget"
-        else
-            print_error "Failed to download with wget"
-            cd - > /dev/null
-            rm -rf "$TEMP_DIR"
-            return 1
-        fi
-    elif command -v curl &> /dev/null; then
-        if curl -L --progress-bar -o "$DRIVER_FILE" "$DRIVER_URL"; then
-            print_status "Download completed successfully with curl"
-        else
-            print_error "Failed to download with curl"
-            cd - > /dev/null
-            rm -rf "$TEMP_DIR"
-            return 1
-        fi
-    else
-        print_error "Neither wget nor curl is available for downloading"
-        print_info "Please install wget or curl: sudo apt-get install wget"
-        cd - > /dev/null
-        rm -rf "$TEMP_DIR"
-        return 1
-    fi
-
-    # Verify download
-    if [ ! -f "$DRIVER_FILE" ] || [ ! -s "$DRIVER_FILE" ]; then
-        print_error "Downloaded file is missing or empty"
-        print_info "Please check your internet connection and try again"
-        cd - > /dev/null
-        rm -rf "$TEMP_DIR"
-        return 1
-    fi
-
-    # Check file size (should be at least 1MB for a valid driver)
-    local file_size=$(stat -c%s "$DRIVER_FILE" 2>/dev/null || echo "0")
-    if [ "$file_size" -lt 1048576 ]; then
-        print_error "Downloaded file appears to be too small (${file_size} bytes)"
-        print_info "This might indicate a download error or network issue"
-        cd - > /dev/null
-        rm -rf "$TEMP_DIR"
-        return 1
-    fi
-
-    print_status "Arrow Flight SQL ODBC driver downloaded successfully (${file_size} bytes)"
-
-    # Install alien if not present (for converting RPM to DEB)
-    if ! command -v alien &> /dev/null; then
-        print_info "Installing alien package converter for RPM to DEB conversion..."
-        $SUDO apt-get update -qq
-        if $SUDO apt-get install -y alien; then
-            print_status "Alien package converter installed successfully"
-        else
-            print_error "Failed to install alien package converter"
-            cd - > /dev/null
-            rm -rf "$TEMP_DIR"
-            return 1
-        fi
-    else
-        print_status "Alien package converter already available"
-    fi
-
-    # Convert RPM to DEB and install
-    print_info "Converting RPM package to DEB format..."
-    $SUDO alien -d "$DRIVER_FILE"
-
-    # Find the generated DEB file
-    DEB_FILE=$(ls *.deb 2>/dev/null | head -n 1)
-
-    if [ -z "$DEB_FILE" ]; then
-        print_error "Failed to convert RPM to DEB format"
-        cd - > /dev/null
-        rm -rf "$TEMP_DIR"
-        return 1
-    fi
-
-    print_info "Installing Dremio ODBC driver..."
-    $SUDO dpkg -i "$DEB_FILE"
-
-    # Fix any dependency issues
-    $SUDO apt-get install -f -y
-
-    # Verify installation and find the actual library path
-    DRIVER_LIB=""
-    if [ -f "/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so.0.9.6.473" ]; then
-        DRIVER_LIB="/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so.0.9.6.473"
-    elif [ -f "/opt/arrow-flight-sql-odbc-driver/lib/libarrow-flight-sql-odbc.so" ]; then
-        DRIVER_LIB="/opt/arrow-flight-sql-odbc-driver/lib/libarrow-flight-sql-odbc.so"
-    else
-        # Try to find any arrow odbc library
-        DRIVER_LIB=$(find /opt/arrow-flight-sql-odbc-driver -name "libarrow*.so*" 2>/dev/null | head -n 1)
-    fi
-
-    if [ -n "$DRIVER_LIB" ] && [ -f "$DRIVER_LIB" ]; then
-        print_status "Dremio ODBC driver installed successfully"
-        print_info "Driver library found at: $DRIVER_LIB"
-
-        # Create a standard symlink for easier reference
-        $SUDO ln -sf "$DRIVER_LIB" "/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so"
-
-        # Configure ODBC driver
-        print_info "Configuring ODBC driver registration..."
-
-        # Create odbcinst.ini entry
-        $SUDO tee -a /etc/odbcinst.ini > /dev/null << EOF
-
-[Dremio Arrow Flight SQL ODBC Driver]
-Description=Dremio Arrow Flight SQL ODBC Driver
-Driver=$DRIVER_LIB
-Setup=$DRIVER_LIB
-UsageCount=1
-EOF
-
-        print_status "ODBC driver configured successfully"
-    else
-        print_error "Dremio ODBC driver installation failed - library not found"
-        cd - > /dev/null
-        rm -rf "$TEMP_DIR"
-        return 1
-    fi
-
-    # Cleanup
-    cd - > /dev/null
-    rm -rf "$TEMP_DIR"
-
-    print_status "Dremio ODBC driver installation completed"
-}
-
-# Test PyODBC installation
-test_pyodbc_installation() {
-    print_info "Testing PyODBC installation..."
-
-    python3 -c "
-import sys
-try:
-    import pyodbc
-    print('✓ PyODBC imported successfully')
-    print(f'   Version: {pyodbc.version}')
-
-    drivers = pyodbc.drivers()
-    print(f'   Available ODBC drivers: {len(drivers)}')
-    for driver in drivers:
-        print(f'     - {driver}')
-
-    if not drivers:
-        print('⚠ No ODBC drivers installed yet')
-        print('   Dremio ODBC driver will be installed automatically')
-    else:
-        # Check for Dremio driver specifically
-        dremio_drivers = [d for d in drivers if 'dremio' in d.lower() or 'arrow' in d.lower()]
-        if dremio_drivers:
-            print(f'✓ Dremio ODBC driver found: {dremio_drivers[0]}')
-        else:
-            print('⚠ Dremio ODBC driver not found in available drivers')
-
-    print('✓ PyODBC installation test passed')
-
-except ImportError as e:
-    print(f'✗ PyODBC import failed: {e}')
-    sys.exit(1)
-except Exception as e:
-    print(f'✗ PyODBC test failed: {e}')
-    sys.exit(1)
-"
-
-    if [ $? -eq 0 ]; then
-        print_status "PyODBC installation test passed"
-    else
-        print_error "PyODBC installation test failed"
-        exit 1
-    fi
-}
-
-# Download JDBC driver if not present
+# Download Arrow Flight SQL JDBC driver if not present
 download_jdbc_driver() {
-    print_info "Checking JDBC driver availability..."
+    print_info "Checking Arrow Flight SQL JDBC driver availability..."
 
     # Create jdbc-drivers directory if it doesn't exist
     if [ ! -d "jdbc-drivers" ]; then
@@ -440,19 +67,25 @@ download_jdbc_driver() {
         print_status "Created jdbc-drivers directory"
     fi
 
-    # Check if JDBC driver already exists
-    if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
-        local file_size=$(stat -c%s "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" 2>/dev/null || echo "0")
+    # Check if Arrow Flight SQL JDBC driver already exists
+    if [ -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" ]; then
+        local file_size=$(stat -c%s "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" 2>/dev/null || echo "0")
         if [ "$file_size" -gt 1000000 ]; then  # Check if file is larger than 1MB (valid JAR)
-            print_status "JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
+            print_status "Arrow Flight SQL JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
             return 0
         else
             print_warning "JDBC driver file exists but appears corrupted, re-downloading..."
-            rm -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+            rm -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
         fi
     fi
 
-    print_info "Downloading Dremio JDBC driver..."
+    # Remove old Dremio JDBC driver if present
+    if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
+        print_info "Removing old Dremio JDBC driver..."
+        rm -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+    fi
+
+    print_info "Downloading Arrow Flight SQL JDBC driver..."
 
     # Check if wget is available
     if ! command -v wget &> /dev/null; then
@@ -462,59 +95,20 @@ download_jdbc_driver() {
         $SUDO apt-get install -y wget
     fi
 
-    # Download the JDBC driver
-    local download_url="https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar"
-    local temp_file="jdbc-drivers/dremio-jdbc-driver-LATEST.jar.tmp"
+    # Download the Arrow Flight SQL JDBC driver from Maven Central
+    local download_url="https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
+    local temp_file="jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar.tmp"
 
     print_info "Downloading from: $download_url"
     if wget -q --show-progress -O "$temp_file" "$download_url"; then
         # Verify the download
         local downloaded_size=$(stat -c%s "$temp_file" 2>/dev/null || echo "0")
         if [ "$downloaded_size" -gt 1000000 ]; then  # Check if downloaded file is larger than 1MB
-            mv "$temp_file" "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
-            print_status "JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
+            mv "$temp_file" "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
+            print_status "Arrow Flight SQL JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
 
-            # Create README if it doesn't exist
-            if [ ! -f "jdbc-drivers/README.md" ]; then
-                cat > "jdbc-drivers/README.md" << 'EOF'
-# JDBC Drivers Directory
-
-This directory contains JDBC driver JAR files for database connectivity.
-
-## Dremio JDBC Driver
-
-The `dremio-jdbc-driver-LATEST.jar` file is the official Dremio JDBC driver that enables Java applications to connect to Dremio using the JDBC protocol.
-
-### Download Information
-- **Source**: https://download.dremio.com/jdbc-driver/
-- **Auto-downloaded**: This file is automatically downloaded by the setup script
-- **Size**: ~45-50MB
-- **Version**: Latest available from Dremio
-
-### Usage
-The Enhanced Dremio Reporting Server automatically detects and uses this driver when available. No additional configuration is required.
-
-### Manual Download
-If you need to manually download or update the driver:
-
-```bash
-cd jdbc-drivers
-wget https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar
-```
-
-### Verification
-To verify the driver is working:
-```bash
-python test_java_setup.py
-```
-
-### Troubleshooting
-- Ensure the JAR file is not corrupted (should be 45-50MB)
-- Verify Java 11+ is installed and JAVA_HOME is set
-- Check that JPype and JayDeBeApi Python packages are installed
-EOF
-                print_status "Created JDBC drivers README"
-            fi
+            # Update README
+            update_jdbc_readme
         else
             rm -f "$temp_file"
             print_error "Downloaded file appears to be corrupted or incomplete"
@@ -522,154 +116,32 @@ EOF
         fi
     else
         rm -f "$temp_file"
-        print_error "Failed to download JDBC driver"
-        print_warning "You can manually download it from: $download_url"
+        print_error "Failed to download Arrow Flight SQL JDBC driver"
+        print_warning "You can manually download the driver from:"
+        print_info "https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
         return 1
     fi
-}
-
-# Create test script for Java functionality
-create_java_test() {
-    print_info "Creating Java functionality test script..."
-    
-    cat > test_java_setup.py << 'EOF'
-#!/usr/bin/env python3
-"""
-Test script to verify Java environment setup for Dremio Reporting Server.
-"""
-import os
-import sys
-
-def test_java_environment():
-    """Test Java environment setup."""
-    print("🧪 Testing Java Environment Setup")
-    print("=" * 40)
-    
-    # Test 1: Check JAVA_HOME
-    java_home = os.environ.get('JAVA_HOME')
-    if java_home:
-        print(f"✅ JAVA_HOME set: {java_home}")
-        if os.path.exists(java_home):
-            print(f"✅ JAVA_HOME directory exists")
-        else:
-            print(f"❌ JAVA_HOME directory not found")
-            return False
-    else:
-        print("❌ JAVA_HOME not set")
-        return False
-    
-    # Test 2: Check Java executable
-    java_bin = os.path.join(java_home, 'bin', 'java')
-    if os.path.exists(java_bin):
-        print(f"✅ Java executable found: {java_bin}")
-    else:
-        print(f"❌ Java executable not found: {java_bin}")
-        return False
-    
-    # Test 3: Test JPype import
-    try:
-        import jpype
-        print(f"✅ JPype available for Java-Python bridge")
-    except ImportError:
-        print("❌ JPype not available")
-        return False
-    
-    # Test 4: Test JayDeBeApi import
-    try:
-        import jaydebeapi
-        print(f"✅ JayDeBeApi available: v{jaydebeapi.__version__}")
-    except ImportError:
-        print("❌ JayDeBeApi not available")
-        return False
-    
-    # Test 5: Test JVM startup (without actually starting it)
-    try:
-        if not jpype.isJVMStarted():
-            print("✅ JVM not started (ready for initialization)")
-        else:
-            print("✅ JVM already started")
-    except Exception as e:
-        print(f"❌ JVM test failed: {e}")
-        return False
-    
-    print("\n🎉 All Java environment tests passed!")
-    print("The system is ready for JDBC driver functionality.")
-    return True
-
-if __name__ == '__main__':
-    success = test_java_environment()
-    sys.exit(0 if success else 1)
-EOF
-    
-    chmod +x test_java_setup.py
-    print_status "Java test script created: test_java_setup.py"
 }
 
 # Main setup function
 main() {
     echo ""
     print_info "Starting Enhanced Dremio Reporting Server setup..."
-    
+
     # Check system requirements
     check_sudo
-    
-    # Install system dependencies
-    update_system
-    install_java
-    install_odbc_components
 
-    # Install Python dependencies
-    install_python_deps
-
-    # Set up environment
-    setup_environment
-
-    # Test integrations
-    test_java_integration
-    test_pyodbc_installation
-
-    # Download and install drivers
-    install_dremio_odbc_driver
+    # Download JDBC driver
     download_jdbc_driver
 
-    # Create test script
-    create_java_test
-    
     echo ""
     print_status "Setup completed successfully!"
     echo ""
     print_info "Next steps:"
     echo "  1. Edit .env file with your Dremio credentials"
-    echo "  2. Run: python test_java_setup.py (to verify Java setup)"
-    echo "  3. Run: python test_pyodbc_installation.py (to verify PyODBC setup)"
-    echo "  4. Run: python app.py (to start the server)"
+    echo "  2. Run: python test_java_setup.py (to test JDBC setup)"
+    echo "  3. Run: ./run.sh (to start the server)"
     echo ""
-    print_info "JDBC Driver Status:"
-    if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
-        local driver_size=$(stat -c%s "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" 2>/dev/null || echo "0")
-        echo "  ✅ Dremio JDBC driver installed ($(($driver_size / 1024 / 1024))MB)"
-        echo "  📁 Location: jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
-    else
-        echo "  ⚠️  JDBC driver not found - some functionality may be limited"
-        echo "  💡 Run setup script again to download the driver"
-    fi
-    echo ""
-    print_info "Java Environment:"
-    echo "  JAVA_HOME: $JAVA_HOME"
-    echo "  Java Version: $(java -version 2>&1 | head -n 1)"
-    echo ""
-    print_info "PyODBC Environment:"
-    echo "  unixODBC: $(odbcinst -j | grep 'unixODBC' | head -n 1)"
-    echo "  PyODBC: $(python3 -c 'import pyodbc; print(f"v{pyodbc.version}")' 2>/dev/null || echo 'Not available')"
-    echo "  ODBC Drivers: $(python3 -c 'import pyodbc; print(len(pyodbc.drivers()))' 2>/dev/null || echo '0') installed"
-    echo ""
-    print_info "Multi-Driver Support:"
-    echo "  ✅ PyArrow Flight SQL (primary driver)"
-    echo "  ✅ JDBC (via JayDeBeApi) - JAR file ready"
-    echo "  ✅ PyODBC - Dremio ODBC driver installed"
-    echo "  ⚠️ ADBC Flight SQL - incompatible with Dremio"
-    echo ""
-    print_info "For Docker deployment, see Dockerfile for container setup"
 }
 
 # Run main function

@@ -295,18 +295,18 @@ class DremioMultiDriverClient:
         # Extract host from URL and configure for Dremio Cloud
         host = base_url.replace('https://', '').replace('http://', '').split('/')[0]
 
-        # JDBC URL and credentials for Dremio Cloud
+        # JDBC URL and credentials for Arrow Flight SQL JDBC driver
         if 'dremio.cloud' in host:
-            # Dremio Cloud uses sql.dremio.cloud for JDBC connections (not data.dremio.cloud)
-            jdbc_host = 'sql.dremio.cloud'
-            jdbc_url = f"jdbc:dremio:direct={jdbc_host}:443;ssl=true"
+            # Dremio Cloud uses data.dremio.cloud for Arrow Flight SQL connections
+            jdbc_host = 'data.dremio.cloud'
+            jdbc_url = f"jdbc:arrow-flight-sql://{jdbc_host}:443?useEncryption=true"
 
             # Add project_id if available (required for Dremio Cloud)
             if project_id:
-                jdbc_url += f";PROJECT_ID={project_id}"
+                jdbc_url += f"&project_id={project_id}"
         else:
-            # On-premise Dremio typically uses port 31010
-            jdbc_url = f"jdbc:dremio:direct={host}:31010;ssl=true"
+            # On-premise Dremio with Arrow Flight SQL (typically port 32010 for Flight SQL)
+            jdbc_url = f"jdbc:arrow-flight-sql://{host}:32010?useEncryption=true"
 
         # Authentication configuration for Dremio Cloud
         if pat:
@@ -340,12 +340,12 @@ class DremioMultiDriverClient:
                 # If JVM is already started, we need to add the JAR to the classpath
                 jpype.addClassPath(jar_path)
 
-            # Connect using the Dremio JDBC driver JAR file
+            # Connect using the Arrow Flight SQL JDBC driver JAR file
             # For Dremio Cloud, use Properties-based authentication as shown in Java examples
             if 'dremio.cloud' in base_url and pat:
                 # Use Properties approach for Dremio Cloud with PAT
                 connection = jaydebeapi.connect(
-                    "com.dremio.jdbc.Driver",
+                    "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver",
                     jdbc_url,
                     {"user": auth_user, "password": auth_pass},
                     jar_path
@@ -353,7 +353,7 @@ class DremioMultiDriverClient:
             else:
                 # Use array approach for on-premise or username/password auth
                 connection = jaydebeapi.connect(
-                    "com.dremio.jdbc.Driver",
+                    "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver",
                     jdbc_url,
                     [auth_user, auth_pass],
                     jar_path

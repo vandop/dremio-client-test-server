@@ -111,11 +111,11 @@ preflight_checks() {
     print_success "Java environment configured"
     
     # Check JDBC driver
-    if [ ! -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
-        print_warning "JDBC driver not found. Some functionality may be limited."
+    if [ ! -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" ]; then
+        print_warning "Arrow Flight SQL JDBC driver not found. Some functionality may be limited."
         print_info "Run './setup.sh' to download the JDBC driver"
     else
-        print_success "JDBC driver available"
+        print_success "Arrow Flight SQL JDBC driver available"
     fi
 
     # Check PyODBC environment

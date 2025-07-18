@@ -143,9 +143,9 @@ def test_jdbc_functionality():
                 print(f"   Execution time: {jdbc_result.get('execution_time', 0):.3f}s")
             else:
                 error = jdbc_result.get('error', 'Unknown error')
-                if 'Class com.dremio.jdbc.Driver is not found' in error:
-                    print("✅ JDBC environment working (missing Dremio JAR file)")
-                    print("   This is expected - download Dremio JDBC driver to jdbc-drivers/")
+                if 'Class org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver is not found' in error:
+                    print("✅ JDBC environment working (missing Arrow Flight SQL JDBC driver JAR file)")
+                    print("   This is expected - download Arrow Flight SQL JDBC driver to jdbc-drivers/")
                 else:
                     print(f"⚠️ JDBC error: {error}")
         else:
@@ -236,8 +236,8 @@ def main():
     if passed == total:
         print("\n🎉 All tests passed! Java environment is properly configured.")
         print("\n📝 Next steps:")
-        print("   1. Download Dremio JDBC driver to jdbc-drivers/ directory")
-        print("   2. Test full JDBC connectivity")
+        print("   1. Download Arrow Flight SQL JDBC driver: ./setup.sh")
+        print("   2. Test full JDBC connectivity: python test_jdbc_dremio_connection.py")
         print("   3. Deploy with Docker if needed")
         return True
     else:

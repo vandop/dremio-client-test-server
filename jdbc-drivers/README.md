@@ -2,14 +2,14 @@
 
 This directory is for storing JDBC driver JAR files needed for database connectivity.
 
-## Dremio JDBC Driver
+## Arrow Flight SQL JDBC Driver
 
-To use the JDBC driver functionality with Dremio, you need to download the Dremio JDBC driver:
+To use the JDBC driver functionality with Dremio, you need the Arrow Flight SQL JDBC driver:
 
 ### Download Instructions
 
 1. **Visit Dremio Downloads**: https://www.dremio.com/drivers/
-2. **Download JDBC Driver**: Get the latest Dremio JDBC driver JAR file
+2. **Download Arrow Flight SQL JDBC Driver**: Get the latest Arrow Flight SQL JDBC driver JAR file
 3. **Place in this directory**: Copy the JAR file to this `jdbc-drivers/` directory
 
 ### Expected Files
@@ -18,18 +18,18 @@ After downloading, you should have:
 ```
 jdbc-drivers/
 ├── README.md (this file)
-└── dremio-jdbc-driver-{version}.jar
+└── flight-sql-jdbc-driver-17.0.0.jar
 ```
 
 ### Example Download Commands
 
 ```bash
-# Example download (replace with actual version/URL)
+# Download the Arrow Flight SQL JDBC driver from Maven Central
 cd jdbc-drivers/
-wget https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-25.0.0-202410051521110861-ed9515a8.jar
+wget https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar
 
 # Or using curl
-curl -O https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-25.0.0-202410051521110861-ed9515a8.jar
+curl -O https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar
 ```
 
 ### Configuration

@@ -95,7 +95,7 @@ ENABLE_PYODBC=true
 ENABLE_ADBC=true
 
 # JDBC Configuration
-JDBC_DRIVER_PATH=jdbc-drivers/dremio-jdbc-driver-25.0.0-202404051521110861-ed9515a8.jar
+JDBC_DRIVER_PATH=jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar
 
 # ODBC Configuration (for PyODBC)
 ODBC_DRIVER_NAME=Arrow Flight SQL ODBC Driver
