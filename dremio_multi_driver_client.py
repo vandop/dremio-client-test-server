@@ -299,21 +299,30 @@ class DremioMultiDriverClient:
         if 'dremio.cloud' in host:
             # Dremio Cloud uses data.dremio.cloud for Arrow Flight SQL connections
             jdbc_host = 'data.dremio.cloud'
-            jdbc_url = f"jdbc:arrow-flight-sql://{jdbc_host}:443?useEncryption=true"
 
-            # Add project_id if available (required for Dremio Cloud)
-            if project_id:
-                jdbc_url += f"&project_id={project_id}"
+            # Use Arrow Flight SQL JDBC driver with token authentication (same as test_jdbc_dremio_connection)
+            if pat:
+                jdbc_url = f"jdbc:arrow-flight-sql://{jdbc_host}:443?useEncryption=true"
+                jdbc_arrow_flight_args = { "user": "", "token": pat }
+
+                # Add project_id if available (required for Dremio Cloud)
+                if project_id:
+                    # Note: catalog parameter would need to be added to URL for project selection
+                    # For now, using the default project
+                    pass
+
+                auth_user = None
+                auth_pass = None
+            else:
+                # Fallback for username/password (though not recommended for Dremio Cloud)
+                jdbc_url = f"jdbc:arrow-flight-sql://{jdbc_host}:443"
+                jdbc_arrow_flight_args = { "user": username, "password": password }
+                auth_user = username
+                auth_pass = password
         else:
             # On-premise Dremio with Arrow Flight SQL (typically port 32010 for Flight SQL)
-            jdbc_url = f"jdbc:arrow-flight-sql://{host}:32010?useEncryption=true"
-
-        # Authentication configuration for Dremio Cloud
-        if pat:
-            # For Dremio Cloud with PAT: use "$token" as username and PAT as password
-            auth_user = "$token"
-            auth_pass = pat
-        else:
+            jdbc_url = f"jdbc:arrow-flight-sql://{host}:32010"
+            jdbc_arrow_flight_args = { "user": username, "password": password }
             auth_user = username
             auth_pass = password
         
@@ -335,29 +344,22 @@ class DremioMultiDriverClient:
 
             # Start JVM if not already started with the JAR in classpath
             if not jpype.isJVMStarted():
-                jpype.startJVM(classpath=[jar_path])
+                jpype.startJVM(
+                    "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED",
+                    classpath=[jar_path]
+                )
             else:
                 # If JVM is already started, we need to add the JAR to the classpath
                 jpype.addClassPath(jar_path)
 
             # Connect using the Arrow Flight SQL JDBC driver JAR file
-            # For Dremio Cloud, use Properties-based authentication as shown in Java examples
-            if 'dremio.cloud' in base_url and pat:
-                # Use Properties approach for Dremio Cloud with PAT
-                connection = jaydebeapi.connect(
-                    "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver",
-                    jdbc_url,
-                    {"user": auth_user, "password": auth_pass},
-                    jar_path
-                )
-            else:
-                # Use array approach for on-premise or username/password auth
-                connection = jaydebeapi.connect(
-                    "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver",
-                    jdbc_url,
-                    [auth_user, auth_pass],
-                    jar_path
-                )
+            # Use the same authentication approach as test_jdbc_dremio_connection
+            connection = jaydebeapi.connect(
+                "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver",
+                jdbc_url,
+                jdbc_arrow_flight_args,
+                jar_path
+            )
             self.drivers['jdbc']['client'] = connection
             return connection
         except Exception as e:

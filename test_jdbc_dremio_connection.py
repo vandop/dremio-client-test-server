@@ -9,12 +9,88 @@ import sys
 import glob
 from pathlib import Path
 from config import Config
+import jpype
+import jaydebeapi
+from typing import Tuple, Dict, Any, Optional
 
 def print_section(title):
     """Print a formatted section header."""
     print(f"\n{'='*60}")
     print(f" {title}")
     print(f"{'='*60}")
+
+def setup_jdbc_client() -> Tuple[str, str, Dict[str, str], Optional[str]]:
+    """
+    Set up JDBC client configuration and return connection parameters.
+
+    Returns:
+        Tuple of (jdbc_url, jar_path, auth_args, project_id)
+    """
+    # Load configuration
+    Config.validate_dremio_config()
+
+    # Find JDBC driver JAR
+    jar_pattern = os.path.join(os.path.dirname(__file__), 'jdbc-drivers', '*.jar')
+    jar_files = glob.glob(jar_pattern)
+
+    if not jar_files:
+        raise FileNotFoundError("No JDBC driver JAR files found in jdbc-drivers/ directory")
+
+    jar_path = jar_files[0]
+    print(f"Using JAR: {os.path.basename(jar_path)}")
+
+    # Build connection URL for Dremio Cloud
+    if Config.DREMIO_CLOUD_URL and 'api.dremio.cloud' in Config.DREMIO_CLOUD_URL:
+        if not Config.DREMIO_PAT:
+            raise ValueError("No Personal Access Token (PAT) found. Set DREMIO_PAT in your .env file")
+
+        # Use Arrow Flight SQL JDBC driver with token authentication
+        jdbc_url = "jdbc:arrow-flight-sql://data.dremio.cloud:443?useEncryption=true"
+        jdbc_arrow_flight_args = { "user": "", "token": Config.DREMIO_PAT }
+
+        # Add project_id if available
+        project_id = getattr(Config, 'DREMIO_PROJECT_ID', None)
+
+        print(f"🌐 Connecting to Dremio Cloud: data.dremio.cloud:443")
+        print(f"🔑 Using PAT authentication")
+
+        return jdbc_url, jar_path, jdbc_arrow_flight_args, project_id
+    else:
+        raise ValueError("Only Dremio Cloud connections are currently supported")
+
+def create_jdbc_connection(jdbc_url: str, jar_path: str, auth_args: Dict[str, str]) -> Any:
+    """
+    Create a JDBC connection using the Arrow Flight SQL JDBC driver.
+
+    Args:
+        jdbc_url: The JDBC connection URL
+        jar_path: Path to the JDBC driver JAR file
+        auth_args: Authentication arguments (user/token)
+
+    Returns:
+        JDBC connection object
+    """
+    # Start JVM if not already started
+    if not jpype.isJVMStarted():
+        print("🚀 Starting JVM with Arrow memory access...")
+        jpype.startJVM(
+            "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED",
+            classpath=[jar_path]
+        )
+    else:
+        jpype.addClassPath(jar_path)
+
+    print("🔗 Establishing JDBC connection...")
+
+    # Use authentication arguments
+    connection = jaydebeapi.connect(
+        "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver",
+        jdbc_url,
+        auth_args,
+        jar_path
+    )
+
+    return connection
 
 def test_jdbc_environment():
     """Test JDBC environment prerequisites."""
@@ -66,55 +142,13 @@ def test_jdbc_environment():
 def test_dremio_jdbc_connection():
     """Test direct JDBC connection to Dremio."""
     print("🔌 Testing Direct JDBC Connection to Dremio")
-    
+
     try:
-        import jpype
-        import jaydebeapi
-        
-        # Load configuration
-        Config.validate_dremio_config()
-        
-        # Find JDBC driver JAR
-        jar_pattern = os.path.join(os.path.dirname(__file__), 'jdbc-drivers', '*.jar')
-        jar_files = glob.glob(jar_pattern)
-        jar_path = jar_files[0]
-        
-        print(f"Using JAR: {os.path.basename(jar_path)}")
-        
-        # Build connection URL for Dremio Cloud
-        if Config.DREMIO_CLOUD_URL and 'api.dremio.cloud' in Config.DREMIO_CLOUD_URL:
-            # Dremio Cloud connection
-            jdbc_url = "jdbc:arrow-flight-sql://data.dremio.cloud:443?useEncryption=true"
-            auth_user = "$token"
-            auth_pass = Config.DREMIO_PAT
-            print(f"🌐 Connecting to Dremio Cloud: data.dremio.cloud:443")
-        else:
-            print("❌ Only Dremio Cloud connections are currently supported in this test")
-            return False
-        
-        if not auth_pass:
-            print("❌ No Personal Access Token (PAT) found")
-            print("   Set DREMIO_PAT in your .env file")
-            return False
-        
-        print(f"🔑 Using PAT authentication")
-        
-        # Start JVM if not already started
-        if not jpype.isJVMStarted():
-            print("🚀 Starting JVM...")
-            jpype.startJVM(classpath=[jar_path])
-        else:
-            jpype.addClassPath(jar_path)
-        
-        print("🔗 Establishing JDBC connection...")
-        
-        # Connect using Arrow Flight SQL JDBC driver
-        connection = jaydebeapi.connect(
-            "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver",
-            jdbc_url,
-            {"user": auth_user, "password": auth_pass},
-            jar_path
-        )
+        # Set up JDBC client configuration
+        jdbc_url, jar_path, auth_args, project_id = setup_jdbc_client()
+
+        # Create JDBC connection
+        connection = create_jdbc_connection(jdbc_url, jar_path, auth_args)
         
         print("✅ JDBC connection established successfully!")
         
@@ -166,30 +200,13 @@ def test_dremio_jdbc_connection():
 def test_jdbc_queries():
     """Test various JDBC queries against Dremio."""
     print("📊 Testing JDBC Queries")
-    
+
     try:
-        import jpype
-        import jaydebeapi
-        
-        # Find JDBC driver JAR
-        jar_pattern = os.path.join(os.path.dirname(__file__), 'jdbc-drivers', '*.jar')
-        jar_files = glob.glob(jar_pattern)
-        jar_path = jar_files[0]
-        
-        # Build connection
-        jdbc_url = "jdbc:arrow-flight-sql://data.dremio.cloud:443?useEncryption=true"
-        auth_user = "$token"
-        auth_pass = Config.DREMIO_PAT
-        
-        if not jpype.isJVMStarted():
-            jpype.startJVM(classpath=[jar_path])
-        
-        connection = jaydebeapi.connect(
-            "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver",
-            jdbc_url,
-            {"user": auth_user, "password": auth_pass},
-            jar_path
-        )
+        # Set up JDBC client configuration
+        jdbc_url, jar_path, auth_args, project_id = setup_jdbc_client()
+
+        # Create JDBC connection
+        connection = create_jdbc_connection(jdbc_url, jar_path, auth_args)
         
         cursor = connection.cursor()
         
@@ -197,7 +214,7 @@ def test_jdbc_queries():
         test_queries = [
             ("Basic SELECT", "SELECT 1 as number, 'test' as text"),
             ("Current timestamp", "SELECT current_timestamp as now"),
-            ("Math operations", "SELECT 2 + 2 as sum, 10 * 5 as product"),
+            ("Math operations", "SELECT 2 + 2 sum_, 10 * 5 product"),
         ]
         
         for description, sql in test_queries:
