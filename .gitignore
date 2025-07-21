@@ -136,3 +136,7 @@ test_ssl_*.py
 
 # JDBC SSL configuration cache
 .jdbc_ssl_config
+
+# Core dump files
+core
+core.*
