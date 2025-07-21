@@ -1,15 +1,17 @@
 # Dremio Reporting Server
 
-A Flask-based web application for connecting to Dremio Cloud and generating reports on job execution and analytics.
+A Flask-based web application for connecting to Dremio Cloud and generating reports on job execution and analytics. Features modern Apache Arrow Flight SQL JDBC driver for reliable SSL connections and optimal performance.
 
 ## Features
 
 - 🚀 **Hello World Web App**: Clean, responsive Flask application
-- 🔗 **Dremio Cloud Integration**: Connect using PyArrow and REST API
+- 🔗 **Multi-Driver Support**: Connect using PyArrow Flight SQL and Apache Arrow Flight SQL JDBC
 - 📊 **Job Reports**: View and analyze Dremio jobs and execution details
 - 🐳 **DevContainer Ready**: Fully configured development environment
 - 🌐 **External Access**: Web server accessible from outside the container
 - ⚙️ **Environment Configuration**: Easy setup through environment variables
+- 🔒 **SSL Compatible**: Uses Apache Arrow Flight SQL JDBC driver (v17.0.0) for reliable SSL connections
+- 🔄 **Automatic Driver Selection**: Intelligently selects the best available driver
 
 ## Quick Start
 
@@ -160,6 +162,31 @@ pytest
 - Double-check username and password in `.env`
 - Verify the project ID is correct
 - Check if your Dremio Cloud account has the necessary permissions
+
+## JDBC Driver Migration ✅
+
+This project has been successfully migrated from the legacy Dremio JDBC driver to the **Apache Arrow Flight SQL JDBC driver v17.0.0** for improved reliability and performance.
+
+### Benefits of the New Driver
+- **✅ SSL Compatibility**: Resolves SSL negotiation failures with Dremio Cloud
+- **✅ Better Performance**: More efficient data transfer using Apache Arrow format
+- **✅ Modern Protocol**: Built on gRPC and Flight SQL standards
+- **✅ Smaller Size**: ~3MB vs ~48MB for the legacy driver
+- **✅ Java 17+ Support**: Optimized for modern Java environments
+
+### Driver Details
+- **Driver**: Apache Arrow Flight SQL JDBC Driver
+- **Version**: 17.0.0
+- **Source**: Maven Central Repository
+- **Class**: `org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver`
+- **URL Format**: `jdbc:arrow-flight-sql://data.dremio.cloud:443?useEncryption=true&token=<PAT>`
+
+### Automatic Setup
+The setup script automatically downloads both drivers:
+1. **Primary**: Apache Arrow Flight SQL JDBC driver (preferred)
+2. **Backup**: Legacy Dremio JDBC driver (fallback)
+
+The application intelligently selects the best available driver, prioritizing the Apache Arrow Flight SQL JDBC driver.
 
 ## Contributing
 

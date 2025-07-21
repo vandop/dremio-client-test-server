@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Java environment variables
-ENV JAVA_HOME=/usr/lib/jvm/default-java
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH=$JAVA_HOME/bin:$PATH
 
 # ODBC environment variables
@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     sudo \
+
     ca-certificates \
     gnupg \
     lsb-release \
@@ -84,6 +85,7 @@ RUN cd /tmp && \
     echo "" >> /etc/odbc.ini && \
     # Cleanup
     rm -rf /tmp/arrow-flight-sql-odbc-driver*
+
 
 # Create a non-root user
 RUN useradd --create-home --shell /bin/bash vscode \
