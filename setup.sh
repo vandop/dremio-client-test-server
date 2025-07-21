@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Enhanced Dremio Reporting Server Setup Script
-# This script sets up the complete environment including Java support
+# Downloads Arrow Flight SQL JDBC driver
 
 set -e  # Exit on any error
 
@@ -50,12 +50,13 @@ check_sudo() {
     fi
 }
 
-# Update system packages
-update_system() {
-    print_info "Updating system packages..."
-    $SUDO apt update -qq
-    print_status "System packages updated"
+# Update JDBC README with current driver information
+update_jdbc_readme() {
+    print_info "Updating JDBC README documentation..."
+    # The README has already been updated to reflect Arrow Flight SQL JDBC driver
+    print_status "JDBC README is up to date"
 }
+
 
 # Install Java (OpenJDK 17 - compatible with devcontainer)
 install_java() {
@@ -253,7 +254,7 @@ except ImportError as e:
 
 # Download JDBC drivers if not present
 download_jdbc_driver() {
-    print_info "Checking JDBC driver availability..."
+    print_info "Checking Arrow Flight SQL JDBC driver availability..."
 
     # Create jdbc-drivers directory if it doesn't exist
     if [ ! -d "jdbc-drivers" ]; then
@@ -261,6 +262,27 @@ download_jdbc_driver() {
         print_status "Created jdbc-drivers directory"
     fi
 
+<<<<<<< HEAD
+    # Check if Arrow Flight SQL JDBC driver already exists
+    if [ -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" ]; then
+        local file_size=$(stat -c%s "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" 2>/dev/null || echo "0")
+        if [ "$file_size" -gt 1000000 ]; then  # Check if file is larger than 1MB (valid JAR)
+            print_status "Arrow Flight SQL JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
+            return 0
+        else
+            print_warning "JDBC driver file exists but appears corrupted, re-downloading..."
+            rm -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
+        fi
+    fi
+
+    # Remove old Dremio JDBC driver if present
+    if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
+        print_info "Removing old Dremio JDBC driver..."
+        rm -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+    fi
+
+    print_info "Downloading Arrow Flight SQL JDBC driver..."
+=======
     # Download Apache Arrow Flight SQL JDBC driver (preferred)
     download_arrow_flight_sql_jdbc
 
@@ -285,6 +307,7 @@ download_arrow_flight_sql_jdbc() {
     fi
 
     print_info "Downloading Apache Arrow Flight SQL JDBC driver..."
+>>>>>>> origin/main
 
     # Check if wget is available
     if ! command -v wget &> /dev/null; then
@@ -294,6 +317,11 @@ download_arrow_flight_sql_jdbc() {
         $SUDO apt-get install -y wget
     fi
 
+<<<<<<< HEAD
+    # Download the Arrow Flight SQL JDBC driver from Maven Central
+    local download_url="https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
+    local temp_file="jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar.tmp"
+=======
     # Download the Apache Arrow Flight SQL JDBC driver
     local download_url="https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
     local temp_file="jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar.tmp"
@@ -342,12 +370,34 @@ download_legacy_dremio_jdbc() {
     # Download the legacy Dremio JDBC driver
     local download_url="https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar"
     local temp_file="jdbc-drivers/dremio-jdbc-driver-LATEST.jar.tmp"
+>>>>>>> origin/main
 
     print_info "Downloading from: $download_url"
     if wget -q --show-progress -O "$temp_file" "$download_url"; then
         # Verify the download
         local downloaded_size=$(stat -c%s "$temp_file" 2>/dev/null || echo "0")
         if [ "$downloaded_size" -gt 1000000 ]; then  # Check if downloaded file is larger than 1MB
+<<<<<<< HEAD
+            mv "$temp_file" "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
+            print_status "Arrow Flight SQL JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
+
+            # Update README
+            update_jdbc_readme
+        else
+            rm -f "$temp_file"
+            print_error "Downloaded file appears to be corrupted or incomplete"
+            return 1
+        fi
+    else
+        rm -f "$temp_file"
+        print_error "Failed to download Arrow Flight SQL JDBC driver"
+        print_warning "You can manually download the driver from:"
+        print_info "https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
+        return 1
+    fi
+}
+
+=======
             mv "$temp_file" "$dremio_jdbc_file"
             print_status "Legacy Dremio JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
 
@@ -536,11 +586,19 @@ setup_devcontainer() {
     fi
 }
 
+>>>>>>> origin/main
 # Main setup function
 main() {
     echo ""
     print_info "Starting Enhanced Dremio Reporting Server setup..."
 
+<<<<<<< HEAD
+    # Check system requirements
+    check_sudo
+
+    # Download JDBC driver
+    download_jdbc_driver
+=======
     # Detect environment
     if [ -f "/.dockerenv" ] || [ -n "$DEVCONTAINER" ]; then
         # Running in container/devcontainer
@@ -558,15 +616,18 @@ main() {
     test_java_integration
     download_jdbc_driver
     create_java_test
+>>>>>>> origin/main
 
     echo ""
     print_status "Setup completed successfully!"
     echo ""
     print_info "Next steps:"
     echo "  1. Edit .env file with your Dremio credentials"
-    echo "  2. Run: python test_java_setup.py (to verify Java setup)"
-    echo "  3. Run: python app.py (to start the server)"
+    echo "  2. Run: python test_java_setup.py (to test JDBC setup)"
+    echo "  3. Run: ./run.sh (to start the server)"
     echo ""
+<<<<<<< HEAD
+=======
     print_info "JDBC Driver Status:"
     if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
         local driver_size=$(stat -c%s "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" 2>/dev/null || echo "0")
@@ -586,6 +647,7 @@ main() {
     else
         print_info "For Docker deployment, see Dockerfile for container setup"
     fi
+>>>>>>> origin/main
 }
 
 # Run main function

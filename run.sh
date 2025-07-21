@@ -111,11 +111,19 @@ preflight_checks() {
     print_success "Java environment configured"
     
     # Check JDBC driver
-    if [ ! -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
-        print_warning "JDBC driver not found. Some functionality may be limited."
+    if [ ! -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" ]; then
+        print_warning "Arrow Flight SQL JDBC driver not found. Some functionality may be limited."
         print_info "Run './setup.sh' to download the JDBC driver"
     else
-        print_success "JDBC driver available"
+        print_success "Arrow Flight SQL JDBC driver available"
+    fi
+
+    # Check PyODBC environment
+    if ! python -c "import pyodbc" &> /dev/null; then
+        print_warning "PyODBC not available. Some functionality may be limited."
+        print_info "Run './setup.sh' to install PyODBC dependencies"
+    else
+        print_success "PyODBC environment available"
     fi
     
     # Check .env file
@@ -183,13 +191,19 @@ handle_failure() {
     echo "   • Download driver: ./setup.sh"
     echo "   • Check driver: ls -la jdbc-drivers/"
     echo ""
+
+    echo -e "${YELLOW}5. PyODBC Environment:${NC}"
+    echo "   • Test PyODBC: python test_pyodbc_installation.py"
+    echo "   • Install ODBC: ./setup.sh"
+    echo "   • Check drivers: python -c 'import pyodbc; print(pyodbc.drivers())'"
+    echo ""
     
-    echo -e "${YELLOW}5. Configuration:${NC}"
+    echo -e "${YELLOW}6. Configuration:${NC}"
     echo "   • Create .env file with Dremio credentials"
     echo "   • Check configuration: curl http://localhost:5001/debug"
     echo ""
-    
-    echo -e "${YELLOW}6. Logs and Debugging:${NC}"
+
+    echo -e "${YELLOW}7. Logs and Debugging:${NC}"
     echo "   • Run with verbose output: FLASK_DEBUG=1 ./run.sh"
     echo "   • Check system logs: journalctl -f"
     echo ""
@@ -197,7 +211,8 @@ handle_failure() {
     echo -e "${CYAN}💡 Quick Fixes:${NC}"
     echo "   • Full reset: ./setup.sh && ./run.sh"
     echo "   • Kill port and retry: ./run.sh --kill-port && ./run.sh"
-    echo "   • Test environment: python test_java_setup.py"
+    echo "   • Test Java: python test_java_setup.py"
+    echo "   • Test PyODBC: python test_pyodbc_installation.py"
     echo ""
     
     echo -e "${GREEN}📚 Documentation:${NC}"

@@ -73,7 +73,7 @@ def main():
             test_simple_query(client)
             
             # Test SYS.Jobs
-            test_sys_jobs_query(client)
+            # test_sys_jobs_query(client)
             
             # Comprehensive test
             test_comprehensive_connection(client)

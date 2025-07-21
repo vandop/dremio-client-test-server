@@ -3,6 +3,7 @@ Multi-driver Dremio client supporting PyArrow Flight, ADBC, PyODBC, and JDBC.
 """
 
 import logging
+import os
 import time
 from typing import Dict, List, Optional, Any, Union
 import pandas as pd
@@ -228,25 +229,114 @@ class DremioMultiDriverClient:
         pat = self._get_config_value("DREMIO_PAT")
 
         # Extract host from URL
-        host = base_url.replace("https://", "").replace("http://", "").split("/")[0]
-        if "api.dremio.cloud" in host:
-            host = "data.dremio.cloud"
 
-        # Build connection string
-        if pat:
-            conn_str = f"DRIVER={{Dremio ODBC Driver}};HOST={host};PORT=443;SSL=1;AuthenticationType=Basic Authentication;UID=token;PWD={pat}"
-        else:
-            conn_str = f"DRIVER={{Dremio ODBC Driver}};HOST={host};PORT=443;SSL=1;AuthenticationType=Basic Authentication;UID={username};PWD={password}"
+        host = base_url.replace('https://', '').replace('http://', '').split('/')[0]
+        if 'api.dremio.cloud' in host:
+            host = 'data.dremio.cloud'
+        
+        # Build connection string - try different driver paths and names
+        # First, try to find the actual driver library path
+        import subprocess
 
+        driver_configs = []
+
+        # Method 1: Try to find driver library paths
         try:
-            connection = pyodbc.connect(conn_str)
-            self.drivers["pyodbc"]["client"] = connection
-            return connection
+            import glob
+
+            # Look for Arrow Flight SQL ODBC driver library with version numbers
+            search_patterns = [
+                "/opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so*",  # Primary location with version
+                "/opt/arrow-flight-sql-odbc-driver/lib/libarrow-odbc.so*",   # Alternative lib directory
+                "/usr/lib/x86_64-linux-gnu/libarrow-odbc.so*",               # System lib directory
+                "/usr/local/lib/libarrow-odbc.so*"                           # Local lib directory
+            ]
+
+            logger.info(f"Searching for ODBC driver libraries in {len(search_patterns)} locations...")
+
+            for pattern in search_patterns:
+                logger.debug(f"Checking pattern: {pattern}")
+                matching_files = glob.glob(pattern)
+                if matching_files:
+                    # Use the first matching file (usually the one with version number)
+                    driver_path = matching_files[0]
+                    driver_configs.append({
+                        "type": "path",
+                        "value": driver_path,
+                        "description": f"Direct library path: {driver_path}"
+                    })
+                    logger.info(f"✅ Found ODBC driver library: {driver_path}")
+                    logger.info(f"   All matches for pattern: {matching_files}")
+                    break
+                else:
+                    logger.debug(f"   No matches for pattern: {pattern}")
+
+            if not driver_configs:
+                logger.warning("No ODBC driver library files found in standard locations")
+
         except Exception as e:
-            logger.warning(
-                f"PyODBC connection failed (driver may not be installed): {e}"
-            )
-            raise
+            logger.warning(f"Could not check driver library paths: {e}")
+
+        # Method 2: Try driver names (fallback)
+        driver_names = [
+            "Arrow Flight SQL ODBC Driver",         # Most common name
+            "Dremio Arrow Flight SQL ODBC Driver",  # Alternative name
+            "Dremio ODBC Driver"                    # Legacy driver name
+        ]
+
+        for driver_name in driver_names:
+            driver_configs.append({
+                "type": "name",
+                "value": driver_name,
+                "description": f"Driver name: {driver_name}"
+            })
+
+        # Log all driver configurations that will be tried
+        logger.info(f"Will try {len(driver_configs)} driver configurations:")
+        for i, config in enumerate(driver_configs, 1):
+            logger.info(f"  {i}. {config['description']}")
+
+        # Try each driver configuration until one works
+        connection = None
+        last_error = None
+
+        for config in driver_configs:
+            try:
+                driver_identifier = config["value"]
+                config_type = config["type"]
+                description = config["description"]
+
+                logger.info(f"Trying PyODBC connection with: {description}")
+
+                if pat:
+                    # For Arrow Flight SQL ODBC driver with PAT: use TOKEN parameter
+                    # According to official Dremio docs: "For TOKEN, specify a personal access token"
+                    conn_str = f"DRIVER={driver_identifier};HOST={host};PORT=443;useEncryption=true;TOKEN={pat}"
+                else:
+                    conn_str = f"DRIVER={driver_identifier};HOST={host};PORT=443;UseEncryption=true;disableCertificateVerification=true;UID={username};PWD={password}"
+
+                # Connect with autocommit disabled to avoid SQLSetConnectAttr issues
+                logger.info(f"Trying connection string: {conn_str}")
+                connection = pyodbc.connect(conn_str, autocommit=True)
+                logger.info(f"PyODBC connected successfully using: {description}")
+                break
+
+            except Exception as e:
+                last_error = e
+                if 'file not found' in str(e):
+                    continue  # Try next driver name
+                else:
+                    # If it's not a "driver not found" error, break and report it
+                    break
+
+        if connection is None:
+            if last_error:
+                raise last_error
+            else:
+                raise Exception("No compatible ODBC driver found")
+
+        self.drivers['pyodbc']['client'] = connection
+        return connection
 
     def _create_jdbc_client(self):
         """Create JDBC client."""
@@ -268,25 +358,34 @@ class DremioMultiDriverClient:
         # Extract host from URL and configure for Dremio Cloud
         host = base_url.replace("https://", "").replace("http://", "").split("/")[0]
 
-        # JDBC URL and credentials for Dremio Cloud
-        if "dremio.cloud" in host:
-            # Dremio Cloud uses sql.dremio.cloud for JDBC connections (not data.dremio.cloud)
-            jdbc_host = "sql.dremio.cloud"
-            jdbc_url = f"jdbc:dremio:direct={jdbc_host}:443;ssl=true"
+        # JDBC URL and credentials for Arrow Flight SQL JDBC driver
+        if 'dremio.cloud' in host:
+            # Dremio Cloud uses data.dremio.cloud for Arrow Flight SQL connections
+            jdbc_host = 'data.dremio.cloud'
 
-            # Add project_id if available (required for Dremio Cloud)
-            if project_id:
-                jdbc_url += f";PROJECT_ID={project_id}"
-        else:
-            # On-premise Dremio typically uses port 31010
-            jdbc_url = f"jdbc:dremio:direct={host}:31010;ssl=true"
+            # Use Arrow Flight SQL JDBC driver with token authentication (same as test_jdbc_dremio_connection)
+            if pat:
+                jdbc_url = f"jdbc:arrow-flight-sql://{jdbc_host}:443?useEncryption=true"
+                jdbc_arrow_flight_args = { "user": "", "token": pat }
 
-        # Authentication configuration for Dremio Cloud
-        if pat:
-            # For Dremio Cloud with PAT: use "$token" as username and PAT as password
-            auth_user = "$token"
-            auth_pass = pat
+                # Add project_id if available (required for Dremio Cloud)
+                if project_id:
+                    # Note: catalog parameter would need to be added to URL for project selection
+                    # For now, using the default project
+                    pass
+
+                auth_user = None
+                auth_pass = None
+            else:
+                # Fallback for username/password (though not recommended for Dremio Cloud)
+                jdbc_url = f"jdbc:arrow-flight-sql://{jdbc_host}:443"
+                jdbc_arrow_flight_args = { "user": username, "password": password }
+                auth_user = username
+                auth_pass = password
         else:
+            # On-premise Dremio with Arrow Flight SQL (typically port 32010 for Flight SQL)
+            jdbc_url = f"jdbc:arrow-flight-sql://{host}:32010"
+            jdbc_arrow_flight_args = { "user": username, "password": password }
             auth_user = username
             auth_pass = password
 
@@ -360,6 +459,7 @@ class DremioMultiDriverClient:
             else:
                 # If JVM is already started, we need to add the JAR to the classpath
                 jpype.addClassPath(jar_path)
+
 
             # Configure connection based on driver type
             if driver_type == "apache_arrow_flight_sql":
@@ -440,6 +540,7 @@ class DremioMultiDriverClient:
                 )
             else:
                 logger.warning(f"JDBC connection failed: {error_msg}")
+
             raise
 
     def _get_flight_sql_jdbc_configs(

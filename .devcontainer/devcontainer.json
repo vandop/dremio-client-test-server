@@ -1,20 +1,35 @@
 {
-    "name": "Dremio Reporting Server",
+    "name": "Enhanced Dremio Reporting Server (x86_64)",
     "build": {
         "dockerfile": "Dockerfile",
+<<<<<<< HEAD
+        "context": "..",
+        "options": [
+            "--platform=linux/amd64"
+        ]
+=======
         "context": ".."
     },
     "features": {
         "ghcr.io/devcontainers/features/git:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {}
+>>>>>>> origin/main
     },
+    "runArgs": [
+        "--platform=linux/amd64"
+    ],
     "customizations": {
         "vscode": {
             "extensions": [
                 "ms-python.python",
                 "ms-python.black-formatter",
                 "ms-toolsai.jupyter",
+<<<<<<< HEAD
+                "ms-vscode.vscode-json",
+                "augment.vscode-augment"
+=======
                 "ms-vscode.vscode-json"
+>>>>>>> origin/main
             ],
             "settings": {
                 "python.defaultInterpreterPath": "/usr/local/bin/python3",
