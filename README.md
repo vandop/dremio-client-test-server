@@ -32,18 +32,36 @@ A Flask-based web application for connecting to Dremio Cloud and generating repo
 
 ### 2. Local Development
 
-1. Install Python 3.11+
-2. Install dependencies:
+1. **Automated Setup** (Recommended):
    ```bash
-   pip install -r requirements.txt
+   # Run the setup script (installs Java, Python deps, JDBC drivers)
+   ./setup.sh
+
+   # Copy and edit environment configuration
+   cp .env.example .env
+   # Edit .env with your Dremio Cloud credentials
+
+   # Start the server
+   ./run.sh
    ```
-3. Set up environment:
+
+2. **Manual Setup**:
    ```bash
+   # Install Python 3.11+ and Java 17+
+   sudo apt update
+   sudo apt install python3 python3-pip openjdk-17-jdk
+
+   # Install Python dependencies
+   pip install -r requirements.txt
+
+   # Set up environment
    cp .env.example .env
    # Edit .env with your credentials
-   ```
-4. Run the application:
-   ```bash
+
+   # Set Java environment
+   export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+   # Run the application
    python app.py
    ```
 
@@ -187,6 +205,116 @@ The setup script automatically downloads both drivers:
 2. **Backup**: Legacy Dremio JDBC driver (fallback)
 
 The application intelligently selects the best available driver, prioritizing the Apache Arrow Flight SQL JDBC driver.
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. `./run.sh` fails with Java errors
+
+**Problem**: `JAVA_HOME directory not found` or Java-related errors
+
+**Solutions**:
+```bash
+# Check Java installation
+java -version
+
+# If Java is not installed, run setup again
+./setup.sh
+
+# Load Java environment manually
+source setup_env.sh
+
+# Verify JAVA_HOME is set correctly
+echo $JAVA_HOME
+```
+
+#### 2. Port already in use
+
+**Problem**: `Port 5001 is already in use`
+
+**Solutions**:
+```bash
+# Kill process on port and retry
+./run.sh --kill-port
+
+# Or use a different port
+FLASK_PORT=5002 ./run.sh
+```
+
+#### 3. JDBC driver not found
+
+**Problem**: JDBC-related errors or missing driver files
+
+**Solutions**:
+```bash
+# Re-run setup to download drivers
+./setup.sh
+
+# Check driver files
+ls -la jdbc-drivers/
+
+# Test JDBC setup
+python test_java_setup.py
+```
+
+#### 4. Python dependencies missing
+
+**Problem**: Import errors or missing packages
+
+**Solutions**:
+```bash
+# Install requirements
+pip install -r requirements.txt
+
+# Check specific packages
+python -c "import flask; print('Flask OK')"
+python -c "import pyarrow; print('PyArrow OK')"
+```
+
+#### 5. Environment variables not loaded
+
+**Problem**: Configuration not found or credentials missing
+
+**Solutions**:
+```bash
+# Check .env file exists
+ls -la .env
+
+# Load environment manually
+source setup_env.sh
+
+# Verify environment variables
+python -c "import os; print('JAVA_HOME:', os.getenv('JAVA_HOME'))"
+```
+
+### Quick Diagnostic Commands
+
+```bash
+# Full environment check
+./setup.sh && ./run.sh
+
+# Test individual components
+python test_java_setup.py
+python test_pyarrow_client.py
+python test_adbc_simple.py
+
+# Check server status
+curl http://localhost:5001/
+
+# View logs with debug mode
+FLASK_DEBUG=1 ./run.sh
+```
+
+### Getting Help
+
+If you're still experiencing issues:
+
+1. **Check the logs**: Look for error messages in the terminal output
+2. **Run diagnostics**: Use the test scripts to identify specific issues
+3. **Environment reset**: Try `./setup.sh` followed by `./run.sh`
+4. **Check documentation**: Review the setup instructions above
+5. **File an issue**: Include error messages and system information
 
 ## Contributing
 

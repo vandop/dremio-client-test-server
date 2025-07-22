@@ -57,6 +57,12 @@ update_jdbc_readme() {
     print_status "JDBC README is up to date"
 }
 
+# Update system packages
+update_system() {
+    print_info "Updating system packages..."
+    $SUDO apt-get update -qq
+    print_status "System packages updated"
+}
 
 # Install Java (OpenJDK 17 - compatible with devcontainer)
 install_java() {
@@ -93,12 +99,49 @@ install_java() {
 
     print_status "Using JAVA_HOME: $JAVA_HOME"
 
+    # Persist JAVA_HOME to environment
+    persist_java_home
+
     # Verify installation
     java -version
     if command -v javac &> /dev/null; then
         javac -version
     fi
     print_status "Java installation verified"
+}
+
+# Persist JAVA_HOME to environment files
+persist_java_home() {
+    if [ -n "$JAVA_HOME" ]; then
+        print_info "Persisting JAVA_HOME to environment..."
+
+        # Add to .bashrc if it exists and doesn't already contain JAVA_HOME
+        if [ -f ~/.bashrc ] && ! grep -q "export JAVA_HOME=" ~/.bashrc; then
+            echo "export JAVA_HOME=$JAVA_HOME" >> ~/.bashrc
+            print_status "JAVA_HOME added to ~/.bashrc"
+        fi
+
+        # Add to .env file if it exists
+        if [ -f .env ]; then
+            if ! grep -q "JAVA_HOME=" .env; then
+                echo "" >> .env
+                echo "# Java Environment (auto-added by setup.sh)" >> .env
+                echo "JAVA_HOME=$JAVA_HOME" >> .env
+                print_status "JAVA_HOME added to .env file"
+            fi
+        fi
+
+        # Create a setup_env.sh file for easy sourcing (always create)
+        cat > setup_env.sh << EOF
+#!/bin/bash
+# Auto-generated environment setup for Dremio Reporting Server
+export JAVA_HOME=$JAVA_HOME
+export PATH=\$JAVA_HOME/bin:\$PATH
+echo "✓ Java environment loaded: \$JAVA_HOME"
+EOF
+        chmod +x setup_env.sh
+        print_status "Created setup_env.sh for easy environment loading"
+    fi
 }
 
 # Install Python dependencies
@@ -254,7 +297,7 @@ except ImportError as e:
 
 # Download JDBC drivers if not present
 download_jdbc_driver() {
-    print_info "Checking Arrow Flight SQL JDBC driver availability..."
+    print_info "Checking JDBC driver availability..."
 
     # Create jdbc-drivers directory if it doesn't exist
     if [ ! -d "jdbc-drivers" ]; then
@@ -262,27 +305,6 @@ download_jdbc_driver() {
         print_status "Created jdbc-drivers directory"
     fi
 
-<<<<<<< HEAD
-    # Check if Arrow Flight SQL JDBC driver already exists
-    if [ -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" ]; then
-        local file_size=$(stat -c%s "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" 2>/dev/null || echo "0")
-        if [ "$file_size" -gt 1000000 ]; then  # Check if file is larger than 1MB (valid JAR)
-            print_status "Arrow Flight SQL JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
-            return 0
-        else
-            print_warning "JDBC driver file exists but appears corrupted, re-downloading..."
-            rm -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
-        fi
-    fi
-
-    # Remove old Dremio JDBC driver if present
-    if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
-        print_info "Removing old Dremio JDBC driver..."
-        rm -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
-    fi
-
-    print_info "Downloading Arrow Flight SQL JDBC driver..."
-=======
     # Download Apache Arrow Flight SQL JDBC driver (preferred)
     download_arrow_flight_sql_jdbc
 
@@ -307,7 +329,6 @@ download_arrow_flight_sql_jdbc() {
     fi
 
     print_info "Downloading Apache Arrow Flight SQL JDBC driver..."
->>>>>>> origin/main
 
     # Check if wget is available
     if ! command -v wget &> /dev/null; then
@@ -317,11 +338,6 @@ download_arrow_flight_sql_jdbc() {
         $SUDO apt-get install -y wget
     fi
 
-<<<<<<< HEAD
-    # Download the Arrow Flight SQL JDBC driver from Maven Central
-    local download_url="https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
-    local temp_file="jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar.tmp"
-=======
     # Download the Apache Arrow Flight SQL JDBC driver
     local download_url="https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
     local temp_file="jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar.tmp"
@@ -370,34 +386,12 @@ download_legacy_dremio_jdbc() {
     # Download the legacy Dremio JDBC driver
     local download_url="https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar"
     local temp_file="jdbc-drivers/dremio-jdbc-driver-LATEST.jar.tmp"
->>>>>>> origin/main
 
     print_info "Downloading from: $download_url"
     if wget -q --show-progress -O "$temp_file" "$download_url"; then
         # Verify the download
         local downloaded_size=$(stat -c%s "$temp_file" 2>/dev/null || echo "0")
         if [ "$downloaded_size" -gt 1000000 ]; then  # Check if downloaded file is larger than 1MB
-<<<<<<< HEAD
-            mv "$temp_file" "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
-            print_status "Arrow Flight SQL JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
-
-            # Update README
-            update_jdbc_readme
-        else
-            rm -f "$temp_file"
-            print_error "Downloaded file appears to be corrupted or incomplete"
-            return 1
-        fi
-    else
-        rm -f "$temp_file"
-        print_error "Failed to download Arrow Flight SQL JDBC driver"
-        print_warning "You can manually download the driver from:"
-        print_info "https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
-        return 1
-    fi
-}
-
-=======
             mv "$temp_file" "$dremio_jdbc_file"
             print_status "Legacy Dremio JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
 
@@ -571,6 +565,9 @@ setup_devcontainer() {
             export JAVA_HOME="$DETECTED_JAVA_HOME"
             print_status "Auto-detected JAVA_HOME: $JAVA_HOME"
         fi
+
+        # Persist JAVA_HOME to environment files
+        persist_java_home
     else
         print_warning "Java not found in devcontainer - this is unexpected"
         install_java
@@ -586,19 +583,11 @@ setup_devcontainer() {
     fi
 }
 
->>>>>>> origin/main
 # Main setup function
 main() {
     echo ""
     print_info "Starting Enhanced Dremio Reporting Server setup..."
 
-<<<<<<< HEAD
-    # Check system requirements
-    check_sudo
-
-    # Download JDBC driver
-    download_jdbc_driver
-=======
     # Detect environment
     if [ -f "/.dockerenv" ] || [ -n "$DEVCONTAINER" ]; then
         # Running in container/devcontainer
@@ -616,38 +605,43 @@ main() {
     test_java_integration
     download_jdbc_driver
     create_java_test
->>>>>>> origin/main
 
     echo ""
     print_status "Setup completed successfully!"
     echo ""
     print_info "Next steps:"
     echo "  1. Edit .env file with your Dremio credentials"
-    echo "  2. Run: python test_java_setup.py (to test JDBC setup)"
-    echo "  3. Run: ./run.sh (to start the server)"
+    echo "  2. Load Java environment: source setup_env.sh (if needed)"
+    echo "  3. Run: python test_java_setup.py (to test JDBC setup)"
+    echo "  4. Run: ./run.sh (to start the server)"
     echo ""
-<<<<<<< HEAD
-=======
     print_info "JDBC Driver Status:"
+    if [ -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" ]; then
+        local driver_size=$(stat -c%s "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" 2>/dev/null || echo "0")
+        echo "  ✅ Apache Arrow Flight SQL JDBC driver installed ($(($driver_size / 1024 / 1024))MB)"
+        echo "  📁 Location: jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
+    fi
     if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
         local driver_size=$(stat -c%s "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" 2>/dev/null || echo "0")
-        echo "  ✅ Dremio JDBC driver installed ($(($driver_size / 1024 / 1024))MB)"
+        echo "  ✅ Legacy Dremio JDBC driver installed ($(($driver_size / 1024 / 1024))MB)"
         echo "  📁 Location: jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
-    else
-        echo "  ⚠️  JDBC driver not found - some functionality may be limited"
-        echo "  💡 Run setup script again to download the driver"
     fi
     echo ""
     print_info "Java Environment:"
     echo "  JAVA_HOME: $JAVA_HOME"
     echo "  Java Version: $(java -version 2>&1 | head -n 1)"
+    echo "  Environment Files: setup_env.sh created for easy loading"
+    echo ""
+    print_info "Environment Loading:"
+    echo "  • Current session: JAVA_HOME is set"
+    echo "  • New sessions: Run 'source setup_env.sh' or restart terminal"
+    echo "  • Persistent: Added to ~/.bashrc and .env files"
     echo ""
     if [ -f "/.dockerenv" ] || [ -n "$DEVCONTAINER" ]; then
         print_info "Running in container - setup optimized for containerized environment"
     else
         print_info "For Docker deployment, see Dockerfile for container setup"
     fi
->>>>>>> origin/main
 }
 
 # Run main function

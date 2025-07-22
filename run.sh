@@ -101,7 +101,17 @@ preflight_checks() {
     
     # Check Java environment
     if [ -z "$JAVA_HOME" ]; then
-        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        # Try to auto-detect Java installation
+        if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+            export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+        elif [ -d "/usr/lib/jvm/java-11-openjdk-amd64" ]; then
+            export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        elif [ -d "/usr/lib/jvm/default-java" ]; then
+            export JAVA_HOME=/usr/lib/jvm/default-java
+        else
+            print_error "No Java installation found. Please install Java 11 or 17."
+            return 1
+        fi
     fi
     
     if [ ! -d "$JAVA_HOME" ]; then
@@ -142,7 +152,16 @@ start_server() {
     local port=${FLASK_PORT:-5001}
     
     print_step "Setting up environment..."
-    export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+    # Auto-detect Java if not set
+    if [ -z "$JAVA_HOME" ]; then
+        if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+            export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+        elif [ -d "/usr/lib/jvm/java-11-openjdk-amd64" ]; then
+            export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        elif [ -d "/usr/lib/jvm/default-java" ]; then
+            export JAVA_HOME=/usr/lib/jvm/default-java
+        fi
+    fi
     export FLASK_PORT=$port
     
     print_step "Starting Enhanced Dremio Reporting Server on port $port..."
