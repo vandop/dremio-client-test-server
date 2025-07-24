@@ -144,23 +144,81 @@ EOF
     fi
 }
 
+# Setup Python environment and ensure 'python' command is available
+setup_python_environment() {
+    print_info "Setting up Python environment..."
+
+    # Check if python3 is available
+    if command -v python3 &> /dev/null; then
+        print_status "Python3 is available"
+
+        # Check if 'python' command exists
+        if ! command -v python &> /dev/null; then
+            print_info "Creating 'python' symlink to 'python3'..."
+
+            # Try to create symlink in /usr/local/bin (requires sudo)
+            if [ -n "$SUDO" ]; then
+                $SUDO ln -sf $(which python3) /usr/local/bin/python
+                print_status "Created 'python' symlink in /usr/local/bin"
+            else
+                # For devcontainer or when no sudo, try user bin directory
+                mkdir -p ~/.local/bin
+                ln -sf $(which python3) ~/.local/bin/python
+
+                # Add to PATH if not already there
+                if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+                    export PATH="$HOME/.local/bin:$PATH"
+                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                    print_status "Created 'python' symlink in ~/.local/bin and added to PATH"
+                else
+                    print_status "Created 'python' symlink in ~/.local/bin"
+                fi
+            fi
+        else
+            print_status "'python' command already available"
+        fi
+    else
+        print_error "Python3 is not installed. Installing..."
+        $SUDO apt update -qq
+        $SUDO apt install -y python3 python3-pip
+    fi
+
+    # Verify python command works
+    if command -v python &> /dev/null; then
+        local python_version=$(python --version 2>&1)
+        print_status "Python command available: $python_version"
+    else
+        print_warning "Python command still not available - manual setup may be required"
+    fi
+}
+
 # Install Python dependencies
 install_python_deps() {
     print_info "Installing Python dependencies..."
-    
+
+    # Ensure Python environment is set up first
+    setup_python_environment
+
     # Check if pip is available
-    if ! command -v pip &> /dev/null; then
+    if ! command -v pip &> /dev/null && ! command -v pip3 &> /dev/null; then
         print_info "Installing pip..."
+        $SUDO apt update -qq
         $SUDO apt install -y python3-pip
     fi
-    
+
+    # Use pip3 if pip is not available
+    local PIP_CMD="pip"
+    if ! command -v pip &> /dev/null && command -v pip3 &> /dev/null; then
+        PIP_CMD="pip3"
+    fi
+
     # Install requirements
     if [ -f "requirements.txt" ]; then
-        pip install -r requirements.txt
+        $PIP_CMD install -r requirements.txt
         print_status "Python dependencies installed from requirements.txt"
     else
         print_warning "requirements.txt not found, installing core dependencies..."
-        pip install flask pyarrow pandas adbc-driver-flightsql jaydebeapi jpype1 requests python-dotenv
+        $PIP_CMD install flask pyarrow pandas adbc-driver-flightsql jaydebeapi jpype1 requests python-dotenv
         print_status "Core Python dependencies installed"
     fi
 }
@@ -550,6 +608,205 @@ EOF
     print_status "Java test script created: test_java_setup.py"
 }
 
+# Create Python test script
+create_python_test_script() {
+    print_info "Creating Python test script..."
+
+    if [ -f "test_python_setup.py" ]; then
+        print_status "Python test script already exists"
+        return
+    fi
+
+    cat > test_python_setup.py << 'EOF'
+#!/usr/bin/env python3
+"""Test script to verify Python setup is working correctly."""
+
+import sys
+import subprocess
+
+def test_python_command():
+    """Test that 'python' command is available and working."""
+    print("🐍 Testing Python Command Availability")
+    print("=" * 50)
+
+    # Test python command
+    try:
+        result = subprocess.run(['python', '--version'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"✅ 'python' command available: {result.stdout.strip()}")
+        else:
+            print(f"❌ 'python' command failed: {result.stderr.strip()}")
+            return False
+    except FileNotFoundError:
+        print("❌ 'python' command not found")
+        return False
+
+    return True
+
+def test_core_dependencies():
+    """Test that core Python dependencies are available."""
+    print("\n📦 Testing Core Dependencies")
+    print("=" * 50)
+
+    dependencies = [
+        ('flask', 'Flask web framework'),
+        ('requests', 'HTTP requests library'),
+        ('pandas', 'Data analysis library'),
+        ('pyarrow', 'Apache Arrow Python library'),
+        ('dotenv', 'Environment variable loader'),
+    ]
+
+    all_available = True
+
+    for module, description in dependencies:
+        try:
+            if module == 'dotenv':
+                from dotenv import load_dotenv
+                print(f"✅ {module}: {description}")
+            else:
+                __import__(module)
+                print(f"✅ {module}: {description}")
+        except ImportError:
+            print(f"❌ {module}: {description} - NOT AVAILABLE")
+            all_available = False
+
+    return all_available
+
+def main():
+    """Run all tests."""
+    print("🧪 Python Setup Verification")
+    print("=" * 60)
+
+    tests = [
+        ("Python Command", test_python_command),
+        ("Core Dependencies", test_core_dependencies),
+    ]
+
+    results = []
+    for test_name, test_func in tests:
+        try:
+            result = test_func()
+            results.append((test_name, result))
+        except Exception as e:
+            print(f"❌ {test_name} test failed with exception: {e}")
+            results.append((test_name, False))
+
+    # Summary
+    print("\n📊 Test Summary")
+    print("=" * 50)
+
+    passed = sum(1 for _, result in results if result)
+    total = len(results)
+
+    for test_name, result in results:
+        status = "✅ PASS" if result else "❌ FAIL"
+        print(f"{status}: {test_name}")
+
+    print(f"\nResults: {passed}/{total} tests passed")
+
+    if passed == total:
+        print("\n🎉 All tests passed! Python setup is working correctly.")
+        return 0
+    else:
+        print(f"\n⚠️  {total - passed} test(s) failed. Run './setup.sh' to fix issues.")
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())
+EOF
+
+    chmod +x test_python_setup.py
+    print_status "Python test script created: test_python_setup.py"
+}
+
+# Install and configure Dremio Arrow Flight SQL ODBC driver
+install_odbc_driver() {
+    print_info "Installing Dremio Arrow Flight SQL ODBC driver..."
+
+    # Check if driver is already installed
+    if odbcinst -q -d | grep -q "Arrow Flight SQL ODBC Driver"; then
+        print_status "Dremio ODBC driver already installed"
+        return
+    fi
+
+    # Create temporary directory
+    local temp_dir="/tmp/dremio-odbc-install"
+    mkdir -p "$temp_dir"
+    cd "$temp_dir"
+
+    # Download the latest Arrow Flight SQL ODBC driver
+    print_info "Downloading Arrow Flight SQL ODBC driver..."
+    if ! wget -q https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm; then
+        print_error "Failed to download ODBC driver"
+        return 1
+    fi
+
+    # Convert RPM to DEB and install
+    print_info "Converting and installing ODBC driver..."
+    if ! $SUDO alien -d arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm; then
+        print_error "Failed to convert RPM package"
+        return 1
+    fi
+
+    if ! $SUDO dpkg -i arrow-flight-sql-odbc-driver*.deb; then
+        print_warning "Package installation had issues, trying to fix dependencies..."
+        $SUDO apt-get install -f -y
+    fi
+
+    # Find the driver library
+    local driver_lib=$(find /opt -name "libarrow-odbc.so*" 2>/dev/null | head -1)
+
+    if [ -z "$driver_lib" ] || [ ! -f "$driver_lib" ]; then
+        print_error "ODBC driver library not found after installation"
+        return 1
+    fi
+
+    print_info "Configuring ODBC driver..."
+
+    # Register the ODBC driver
+    $SUDO tee /etc/odbcinst.ini > /dev/null << EOF
+[Arrow Flight SQL ODBC Driver]
+Description=Arrow Flight SQL ODBC Driver
+Driver=$driver_lib
+Setup=$driver_lib
+UsageCount=1
+EOF
+
+    # Create sample DSN configurations
+    $SUDO tee /etc/odbc.ini > /dev/null << 'EOF'
+[Dremio Cloud Flight SQL]
+Description=Dremio Cloud via Arrow Flight SQL ODBC
+Driver=Arrow Flight SQL ODBC Driver
+HOST=data.dremio.cloud
+PORT=443
+useEncryption=true
+TOKEN=your_personal_access_token_here
+
+[Dremio Software Flight SQL]
+Description=Dremio Software via Arrow Flight SQL ODBC
+Driver=Arrow Flight SQL ODBC Driver
+HOST=localhost
+PORT=32010
+useEncryption=false
+UID=your_username_here
+PWD=your_password_here
+EOF
+
+    # Cleanup
+    cd /
+    rm -rf "$temp_dir"
+
+    # Verify installation
+    if odbcinst -q -d | grep -q "Arrow Flight SQL ODBC Driver"; then
+        print_status "Dremio Arrow Flight SQL ODBC driver installed successfully"
+        print_info "Driver registered: $(odbcinst -q -d | grep 'Arrow Flight SQL ODBC Driver')"
+        print_info "DSNs available: $(odbcinst -q -s | tr '\n' ' ')"
+    else
+        print_error "ODBC driver installation verification failed"
+        return 1
+    fi
+}
+
 # Devcontainer-specific setup
 setup_devcontainer() {
     print_info "Detected devcontainer environment"
@@ -573,6 +830,10 @@ setup_devcontainer() {
         install_java
     fi
 
+    # Ensure Python environment is properly set up
+    print_info "Setting up Python environment in devcontainer..."
+    setup_python_environment
+
     # Python dependencies should already be installed, but verify
     print_info "Verifying Python dependencies in devcontainer..."
     if ! python3 -c "import jpype, jaydebeapi" &> /dev/null; then
@@ -580,6 +841,14 @@ setup_devcontainer() {
         install_python_deps
     else
         print_status "Python dependencies already available"
+    fi
+
+    # Install ODBC driver if not already available
+    if ! odbcinst -q -d 2>/dev/null | grep -q "Arrow Flight SQL ODBC Driver"; then
+        print_info "Installing ODBC driver for devcontainer..."
+        install_odbc_driver
+    else
+        print_status "ODBC driver already available"
     fi
 }
 
@@ -604,7 +873,9 @@ main() {
     setup_environment
     test_java_integration
     download_jdbc_driver
+    install_odbc_driver
     create_java_test
+    create_python_test_script
 
     echo ""
     print_status "Setup completed successfully!"
@@ -612,8 +883,10 @@ main() {
     print_info "Next steps:"
     echo "  1. Edit .env file with your Dremio credentials"
     echo "  2. Load Java environment: source setup_env.sh (if needed)"
-    echo "  3. Run: python test_java_setup.py (to test JDBC setup)"
-    echo "  4. Run: ./run.sh (to start the server)"
+    echo "  3. Run: python test_python_setup.py (to test Python setup)"
+    echo "  4. Run: python test_java_setup.py (to test JDBC setup)"
+    echo "  5. Test ODBC: odbcinst -q -d (to verify ODBC driver)"
+    echo "  6. Run: ./run.sh (to start the server)"
     echo ""
     print_info "JDBC Driver Status:"
     if [ -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" ]; then
