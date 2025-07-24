@@ -78,12 +78,18 @@ kill_port_process() {
 preflight_checks() {
     print_info "Running pre-flight checks..."
     
-    # Check if Python is available
-    if ! command -v python &> /dev/null; then
+    # Check if Python is available and set PYTHON_CMD
+    if command -v python &> /dev/null; then
+        export PYTHON_CMD="python"
+        print_success "Python is available"
+    elif command -v python3 &> /dev/null; then
+        export PYTHON_CMD="python3"
+        print_success "Python3 is available"
+    else
         print_error "Python is not installed or not in PATH"
+        print_info "Please install Python 3.8+ or run the setup script: ./setup.sh"
         return 1
     fi
-    print_success "Python is available"
     
     # Check if app.py exists
     if [ ! -f "app.py" ]; then
@@ -93,15 +99,26 @@ preflight_checks() {
     print_success "app.py found"
     
     # Check if requirements are installed
-    if ! python -c "import flask" &> /dev/null; then
+    if ! $PYTHON_CMD -c "import flask" &> /dev/null; then
         print_error "Flask not installed. Run: pip install -r requirements.txt"
+        print_info "Or run the setup script: ./setup.sh"
         return 1
     fi
     print_success "Python dependencies available"
     
     # Check Java environment
     if [ -z "$JAVA_HOME" ]; then
-        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        # Try to auto-detect Java installation
+        if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+            export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+        elif [ -d "/usr/lib/jvm/java-11-openjdk-amd64" ]; then
+            export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        elif [ -d "/usr/lib/jvm/default-java" ]; then
+            export JAVA_HOME=/usr/lib/jvm/default-java
+        else
+            print_error "No Java installation found. Please install Java 11 or 17."
+            return 1
+        fi
     fi
     
     if [ ! -d "$JAVA_HOME" ]; then
@@ -142,7 +159,16 @@ start_server() {
     local port=${FLASK_PORT:-5001}
     
     print_step "Setting up environment..."
-    export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+    # Auto-detect Java if not set
+    if [ -z "$JAVA_HOME" ]; then
+        if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+            export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+        elif [ -d "/usr/lib/jvm/java-11-openjdk-amd64" ]; then
+            export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        elif [ -d "/usr/lib/jvm/default-java" ]; then
+            export JAVA_HOME=/usr/lib/jvm/default-java
+        fi
+    fi
     export FLASK_PORT=$port
     
     print_step "Starting Enhanced Dremio Reporting Server on port $port..."
@@ -154,7 +180,7 @@ start_server() {
     echo ""
     
     # Start the server
-    python app.py
+    $PYTHON_CMD app.py
     local exit_code=$?
     
     return $exit_code
