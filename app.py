@@ -86,6 +86,9 @@ def auth():
     return render_template('auth.html', config=config)
 
 
+
+
+
 @app.route('/api/configure-auth', methods=['POST'])
 def configure_auth():
     """API endpoint to configure authentication."""
