@@ -1,0 +1,47 @@
+feat: Complete Apache Arrow Flight SQL JDBC driver migration and fix JVM requirements
+
+🎯 **Major Changes:**
+- Remove all legacy Dremio JDBC driver references
+- Add required JVM --add-opens arguments for Apache Arrow Flight SQL
+- Update all JDBC test scripts with proper JVM configuration
+- Fix PyODBC driver path detection to use full library paths
+
+🔧 **JDBC Driver Migration:**
+- Replace com.dremio.jdbc.Driver with org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
+- Update JDBC URLs from jdbc:dremio:direct to jdbc:arrow-flight-sql format
+- Remove legacy driver download from setup scripts
+- Update documentation to focus on Flight SQL driver only
+
+⚡ **JVM Configuration Fixed:**
+- Add --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
+- Add --add-opens=java.base/sun.nio.ch=org.apache.arrow.memory.core,ALL-UNNAMED
+- Add --add-opens=java.base/java.lang=org.apache.arrow.memory.core,ALL-UNNAMED
+- Add --add-opens=java.base/java.lang.reflect=org.apache.arrow.memory.core,ALL-UNNAMED
+- Add --add-opens=java.base/java.io=org.apache.arrow.memory.core,ALL-UNNAMED
+- Add --add-opens=java.base/java.util=org.apache.arrow.memory.core,ALL-UNNAMED
+
+🚀 **PyODBC Enhancements:**
+- Enhanced driver path detection with glob patterns for versioned libraries
+- Use direct driver library path: /opt/arrow-flight-sql-odbc-driver/lib64/libarrow-odbc.so.0.9.6.473
+- Improved connection string format with proper SSL parameters
+
+📋 **Files Updated:**
+- dremio_multi_driver_client.py: Enhanced JVM args and driver detection
+- test_jdbc_setup.py: Complete rewrite with Flight SQL support
+- test_arrow_flight_sql_jdbc.py: Updated JVM arguments
+- test_flight_sql_jar.py: New JAR testing utility
+- test_jdbc_dremio_connection.py: Updated JVM configuration
+- setup.sh: Removed legacy driver download
+- .devcontainer/setup-devcontainer.sh: Updated for Flight SQL driver
+
+✅ **Test Results:**
+- JDBC: ✅ Working with Apache Arrow Flight SQL driver
+- PyArrow: ✅ Working with native Flight SQL
+- ADBC: ✅ Working with Flight SQL protocol
+- PyODBC: ✅ Working with direct driver path
+
+🎉 **All 4 drivers now use modern Apache Arrow Flight SQL protocols!**
+
+Resolves: RuntimeException Failed to initialize MemoryUtil JVM startup issues
+Resolves: Legacy Dremio JDBC driver compatibility problems
+Resolves: PyODBC driver path detection issues
