@@ -363,27 +363,12 @@ download_jdbc_driver() {
         print_status "Created jdbc-drivers directory"
     fi
 
-<<<<<<< HEAD
-    # Check if Arrow Flight SQL JDBC driver already exists
-    if [ -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" ]; then
-        local file_size=$(stat -c%s "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar" 2>/dev/null || echo "0")
-        if [ "$file_size" -gt 1000000 ]; then  # Check if file is larger than 1MB (valid JAR)
-            print_status "Arrow Flight SQL JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
-            return 0
-        else
-            print_warning "JDBC driver file exists but appears corrupted, re-downloading..."
-            rm -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
-        fi
-    fi
-
     # Remove old Dremio JDBC driver if present
     if [ -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar" ]; then
         print_info "Removing old Dremio JDBC driver..."
         rm -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
     fi
 
-    print_info "Downloading Arrow Flight SQL JDBC driver..."
-=======
     # Download Apache Arrow Flight SQL JDBC driver (modern, preferred)
     download_arrow_flight_sql_jdbc
 }
