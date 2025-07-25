@@ -1,7 +1,7 @@
 """
 Main Flask application for Dremio Reporting Server.
 """
-from flask import Flask, render_template, jsonify, request, session
+from flask import Flask, render_template, jsonify, request, session, redirect
 from config import Config
 from dremio_hybrid_client import DremioHybridClient
 from dremio_multi_driver_client import DremioMultiDriverClient
@@ -16,33 +16,175 @@ app.secret_key = os.environ.get('SECRET_KEY', 'debug-secret-key-change-in-produc
 dremio_client = DremioHybridClient()
 
 
+def is_auth_configured():
+    """Check if authentication is properly configured."""
+    # Check session first
+    if session.get('auth_configured'):
+        return True
+
+    # Check environment variables
+    dremio_url = os.environ.get('DREMIO_CLOUD_URL') or os.environ.get('DREMIO_URL')
+    pat = os.environ.get('DREMIO_PAT')
+    username = os.environ.get('DREMIO_USERNAME')
+    password = os.environ.get('DREMIO_PASSWORD')
+
+    # Must have URL and either PAT or username/password
+    has_url = bool(dremio_url)
+    has_auth = bool(pat) or (bool(username) and bool(password))
+
+    return has_url and has_auth
+
+
+def get_current_config():
+    """Get current configuration for pre-populating the form."""
+    return {
+        'dremio_url': os.environ.get('DREMIO_CLOUD_URL') or os.environ.get('DREMIO_URL', ''),
+        'project_id': os.environ.get('DREMIO_PROJECT_ID', ''),
+        'username': os.environ.get('DREMIO_USERNAME', ''),
+        'password': os.environ.get('DREMIO_PASSWORD', ''),
+        'pat': os.environ.get('DREMIO_PAT', '')
+    }
+
+
 @app.route('/')
 def index():
-    """Main hello world page."""
+    """Main hello world page - redirects to auth if not configured."""
+    # Check if authentication is configured
+    if not is_auth_configured():
+        return redirect('/auth')
     return render_template('index.html')
 
 
 @app.route('/reports')
 def reports():
     """Reports page showing Dremio jobs."""
+    if not is_auth_configured():
+        return redirect('/auth')
     return render_template('reports.html')
 
 
 @app.route('/query')
 def query():
     """SQL Query interface page."""
+    if not is_auth_configured():
+        return redirect('/auth')
     return render_template('query.html')
 
 
 @app.route('/debug')
 def debug():
     """Debug configuration page."""
+    if not is_auth_configured():
+        return redirect('/auth')
     return render_template('debug.html')
+
+
+@app.route('/auth')
+def auth():
+    """Authentication configuration page."""
+    config = get_current_config()
+    return render_template('auth.html', config=config)
+
+
+@app.route('/api/configure-auth', methods=['POST'])
+def configure_auth():
+    """API endpoint to configure authentication."""
+    try:
+        dremio_type = request.form.get('dremio_type')
+        auth_method = request.form.get('auth_method')
+        dremio_url = request.form.get('dremio_url')
+        project_id = request.form.get('project_id', '')
+
+        if not dremio_type or not auth_method or not dremio_url:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields'
+            })
+
+        # Validate URL format
+        if not dremio_url.startswith(('http://', 'https://')):
+            return jsonify({
+                'success': False,
+                'error': 'URL must start with http:// or https://'
+            })
+
+        # Set environment variables for this session
+        os.environ['DREMIO_CLOUD_URL'] = dremio_url
+        os.environ['DREMIO_URL'] = dremio_url
+
+        if project_id:
+            os.environ['DREMIO_PROJECT_ID'] = project_id
+
+        if auth_method == 'pat':
+            pat = request.form.get('pat')
+            if not pat:
+                return jsonify({
+                    'success': False,
+                    'error': 'Personal Access Token is required'
+                })
+            os.environ['DREMIO_PAT'] = pat
+            # Clear username/password
+            os.environ.pop('DREMIO_USERNAME', None)
+            os.environ.pop('DREMIO_PASSWORD', None)
+
+        elif auth_method == 'credentials':
+            username = request.form.get('username')
+            password = request.form.get('password')
+            if not username or not password:
+                return jsonify({
+                    'success': False,
+                    'error': 'Username and password are required'
+                })
+            os.environ['DREMIO_USERNAME'] = username
+            os.environ['DREMIO_PASSWORD'] = password
+            # Clear PAT
+            os.environ.pop('DREMIO_PAT', None)
+
+        # Test the connection
+        try:
+            # Reinitialize the client with new config
+            global dremio_client
+            dremio_client = DremioHybridClient()
+
+            # Test connection
+            result = dremio_client.test_connection()
+
+            if result.get('success'):
+                # Mark as configured in session
+                session['auth_configured'] = True
+
+                return jsonify({
+                    'success': True,
+                    'message': f'Successfully connected to {dremio_type.title()} using {auth_method.upper()}'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'Connection test failed: {result.get("error", "Unknown error")}'
+                })
+
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Connection test failed: {str(e)}'
+            })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Configuration error: {str(e)}'
+        })
 
 
 @app.route('/api/test-connection')
 def test_connection():
     """API endpoint to test Dremio connection."""
+    if not is_auth_configured():
+        return jsonify({
+            'status': 'error',
+            'message': 'Authentication not configured'
+        }), 401
+
     try:
         result = dremio_client.test_connection()
         return jsonify(result)
@@ -56,6 +198,12 @@ def test_connection():
 @app.route('/api/jobs')
 def get_jobs():
     """API endpoint to retrieve Dremio jobs."""
+    if not is_auth_configured():
+        return jsonify({
+            'status': 'error',
+            'message': 'Authentication not configured'
+        }), 401
+
     try:
         limit = request.args.get('limit', 50, type=int)
         result = dremio_client.get_jobs(limit=limit)
@@ -88,6 +236,12 @@ def get_jobs():
 @app.route('/api/jobs/<job_id>')
 def get_job_details(job_id):
     """API endpoint to get details for a specific job."""
+    if not is_auth_configured():
+        return jsonify({
+            'status': 'error',
+            'message': 'Authentication not configured'
+        }), 401
+
     try:
         job_details = dremio_client.get_job_details(job_id)
         
@@ -112,6 +266,12 @@ def get_job_details(job_id):
 @app.route('/api/projects')
 def get_projects():
     """API endpoint to retrieve accessible Dremio projects."""
+    if not is_auth_configured():
+        return jsonify({
+            'status': 'error',
+            'message': 'Authentication not configured'
+        }), 401
+
     try:
         result = dremio_client.get_projects()
 
@@ -143,6 +303,12 @@ def get_projects():
 @app.route('/api/query', methods=['POST'])
 def execute_query():
     """API endpoint to execute SQL queries using Flight SQL."""
+    if not is_auth_configured():
+        return jsonify({
+            'status': 'error',
+            'message': 'Authentication not configured'
+        }), 401
+
     try:
         data = request.get_json()
         if not data or 'sql' not in data:
@@ -191,6 +357,12 @@ def execute_query():
 @app.route('/api/query-multi-driver', methods=['POST'])
 def execute_query_multi_driver():
     """Execute SQL query across multiple drivers."""
+    if not is_auth_configured():
+        return jsonify({
+            'status': 'error',
+            'message': 'Authentication not configured'
+        }), 401
+
     try:
         data = request.get_json()
         if not data or 'sql' not in data:
@@ -294,6 +466,12 @@ def get_available_drivers():
 @app.route('/api/schemas')
 def get_schemas():
     """API endpoint to get available schemas using Flight SQL."""
+    if not is_auth_configured():
+        return jsonify({
+            'status': 'error',
+            'message': 'Authentication not configured'
+        }), 401
+
     try:
         result = dremio_client.get_schemas()
 

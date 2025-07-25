@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dremio Authentication - Dremio Reporting Server</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .auth-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .auth-type-selector {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            justify-content: center;
+        }
+
+        .auth-type-card {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+            max-width: 300px;
+            text-align: center;
+        }
+
+        .auth-type-card:hover {
+            border-color: #007bff;
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.2);
+        }
+
+        .auth-type-card.selected {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+
+        .auth-form {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 30px;
+            margin-top: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .auth-method-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .auth-method-btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .auth-method-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .auth-fields {
+            display: none;
+        }
+
+        .auth-fields.active {
+            display: block;
+        }
+
+        .submit-btn {
+            background: #28a745;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .submit-btn:hover {
+            background: #218838;
+        }
+
+        .submit-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .error-box {
+            background: #ffe6e6;
+            border: 1px solid #ffb3b3;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .success-box {
+            background: #e6ffe6;
+            border: 1px solid #b3ffb3;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>🔐 Dremio Authentication Setup</h1>
+            <p>Configure your connection to Dremio to get started</p>
+        </div>
+
+        <div id="errorBox" class="error-box"></div>
+        <div id="successBox" class="success-box"></div>
+
+        <div class="auth-type-selector">
+            <div class="auth-type-card" id="cloudCard" onclick="selectDremioType('cloud')">
+                <h3>☁️ Dremio Cloud</h3>
+                <p>Connect to Dremio Cloud (SaaS)</p>
+                <small>Recommended for most users</small>
+            </div>
+            <div class="auth-type-card" id="softwareCard" onclick="selectDremioType('software')">
+                <h3>🏢 Dremio Software</h3>
+                <p>Connect to on-premises Dremio</p>
+                <small>Self-hosted installations</small>
+            </div>
+        </div>
+
+        <form id="authForm" class="auth-form" style="display: none;">
+            <div class="form-group">
+                <label for="dremioUrl">Dremio URL:</label>
+                <input type="url" id="dremioUrl" name="dremio_url" required>
+                <small id="urlHelp" class="form-text text-muted"></small>
+            </div>
+
+            <div class="form-group" id="projectGroup" style="display: none;">
+                <label for="projectId">Project ID (Optional):</label>
+                <input type="text" id="projectId" name="project_id">
+                <small class="form-text text-muted">Leave empty to use default project</small>
+            </div>
+
+            <div class="info-box">
+                <strong>Authentication Method:</strong> Choose how you want to authenticate
+            </div>
+
+            <div class="auth-method-selector">
+                <button type="button" class="auth-method-btn" id="patBtn" onclick="selectAuthMethod('pat')">
+                    🔑 Personal Access Token (Recommended)
+                </button>
+                <button type="button" class="auth-method-btn" id="credentialsBtn"
+                    onclick="selectAuthMethod('credentials')">
+                    👤 Username & Password
+                </button>
+            </div>
+
+            <div id="patFields" class="auth-fields">
+                <div class="form-group">
+                    <label for="pat">Personal Access Token:</label>
+                    <input type="password" id="pat" name="pat">
+                    <small class="form-text text-muted">
+                        Generate a PAT in your Dremio account settings
+                    </small>
+                </div>
+            </div>
+
+            <div id="credentialsFields" class="auth-fields">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password">
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn" disabled>
+                🚀 Connect to Dremio
+            </button>
+        </form>
+    </div>
+
+    <script>
+        let selectedDremioType = null;
+        let selectedAuthMethod = null;
+
+        // Pre-populate from server data if available
+        const serverConfig = {{ config | tojson | safe }};
+
+        function selectDremioType(type) {
+            selectedDremioType = type;
+
+            // Update UI
+            document.getElementById('cloudCard').classList.remove('selected');
+            document.getElementById('softwareCard').classList.remove('selected');
+            document.getElementById(type + 'Card').classList.add('selected');
+
+            // Show form
+            document.getElementById('authForm').style.display = 'block';
+
+            // Update URL field and help text
+            const urlField = document.getElementById('dremioUrl');
+            const urlHelp = document.getElementById('urlHelp');
+            const projectGroup = document.getElementById('projectGroup');
+
+            if (type === 'cloud') {
+                urlField.value = serverConfig.dremio_url || 'https://api.dremio.cloud';
+                urlHelp.textContent = 'Example: https://api.dremio.cloud';
+                projectGroup.style.display = 'block';
+            } else {
+                urlField.value = serverConfig.dremio_url || 'https://your-dremio-server.com';
+                urlHelp.textContent = 'Example: https://your-dremio-server.com:9047';
+                projectGroup.style.display = 'none';
+            }
+
+            // Pre-select PAT method
+            selectAuthMethod('pat');
+            updateSubmitButton();
+        }
+
+        function selectAuthMethod(method) {
+            selectedAuthMethod = method;
+
+            // Update buttons
+            document.getElementById('patBtn').classList.remove('active');
+            document.getElementById('credentialsBtn').classList.remove('active');
+            document.getElementById(method + 'Btn').classList.add('active');
+
+            // Show/hide fields
+            document.getElementById('patFields').classList.remove('active');
+            document.getElementById('credentialsFields').classList.remove('active');
+            document.getElementById(method + 'Fields').classList.add('active');
+
+            // Pre-populate if available
+            if (method === 'pat' && serverConfig.pat) {
+                document.getElementById('pat').value = serverConfig.pat;
+            } else if (method === 'credentials') {
+                if (serverConfig.username) document.getElementById('username').value = serverConfig.username;
+                if (serverConfig.password) document.getElementById('password').value = serverConfig.password;
+            }
+
+            updateSubmitButton();
+        }
+
+        function updateSubmitButton() {
+            const submitBtn = document.getElementById('submitBtn');
+            const isValid = selectedDremioType && selectedAuthMethod &&
+                document.getElementById('dremioUrl').value.trim();
+
+            submitBtn.disabled = !isValid;
+        }
+
+        // Pre-populate form if config exists
+        if (serverConfig.dremio_url) {
+            if (serverConfig.dremio_url.includes('dremio.cloud')) {
+                selectDremioType('cloud');
+            } else {
+                selectDremioType('software');
+            }
+
+            if (serverConfig.project_id) {
+                document.getElementById('projectId').value = serverConfig.project_id;
+            }
+        }
+
+        // Form submission
+        document.getElementById('authForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            const errorBox = document.getElementById('errorBox');
+            const successBox = document.getElementById('successBox');
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = '🔄 Connecting...';
+            errorBox.style.display = 'none';
+            successBox.style.display = 'none';
+
+            const formData = new FormData(this);
+            formData.append('dremio_type', selectedDremioType);
+            formData.append('auth_method', selectedAuthMethod);
+
+            try {
+                const response = await fetch('/api/configure-auth', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    successBox.textContent = result.message;
+                    successBox.style.display = 'block';
+
+                    // Redirect to main app after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+                } else {
+                    errorBox.textContent = result.error || 'Configuration failed';
+                    errorBox.style.display = 'block';
+                }
+            } catch (error) {
+                errorBox.textContent = 'Network error: ' + error.message;
+                errorBox.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 Connect to Dremio';
+            }
+        });
+
+        // Update submit button on input changes
+        document.getElementById('dremioUrl').addEventListener('input', updateSubmitButton);
+        document.getElementById('pat').addEventListener('input', updateSubmitButton);
+        document.getElementById('username').addEventListener('input', updateSubmitButton);
+        document.getElementById('password').addEventListener('input', updateSubmitButton);
+    </script>
+</body>
+
+</html>
