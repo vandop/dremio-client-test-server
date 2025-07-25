@@ -163,7 +163,7 @@ def configure_auth():
             # Test connection
             result = dremio_client.test_connection()
 
-            if result.get('success'):
+            if result.get('status') == 'success':
                 # Mark as configured in session
                 session['auth_configured'] = True
 
@@ -174,7 +174,7 @@ def configure_auth():
             else:
                 return jsonify({
                     'success': False,
-                    'error': f'Connection test failed: {result.get("error", "Unknown error")}'
+                    'error': f'Connection test failed: {result.get("message", "Unknown error")}'
                 })
 
         except Exception as e:
