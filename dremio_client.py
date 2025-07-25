@@ -708,21 +708,20 @@ class DremioClient:
 
         logger.info("✓ Authentication successful")
 
-        # Step 3: Test jobs access
+        # Step 3: Test jobs access (optional - don't fail if this doesn't work)
         logger.info("Testing jobs access...")
         jobs_result = self.get_jobs(limit=1)
 
         if not jobs_result['success']:
-            logger.error(f"✗ Jobs access failed: {jobs_result['message']}")
-            return {
-                'status': 'error',
-                'step': 'jobs_access',
-                'message': f"Jobs access failed: {jobs_result['message']}",
-                'details': jobs_result,
-                'suggestions': self._get_jobs_suggestions(jobs_result)
-            }
+            logger.warning(f"⚠ Jobs access failed: {jobs_result['message']}")
+            logger.info("Note: Jobs access failure doesn't prevent basic connectivity")
+            jobs_accessible = False
+            jobs_count = 0
+        else:
+            logger.info(f"✓ Jobs access successful - found {jobs_result['count']} jobs")
+            jobs_accessible = True
+            jobs_count = jobs_result['count']
 
-        logger.info(f"✓ Jobs access successful - found {jobs_result['count']} jobs")
         logger.info("=== Connection Test Completed Successfully ===")
 
         return {
@@ -730,12 +729,12 @@ class DremioClient:
             'message': 'Successfully connected to Dremio Cloud',
             'details': {
                 'authentication': 'successful',
-                'jobs_accessible': True,
-                'jobs_count': jobs_result['count'],
+                'jobs_accessible': jobs_accessible,
+                'jobs_count': jobs_count,
                 'project_id': self.project_id,
                 'base_url': self.base_url
             },
-            'steps_completed': ['configuration', 'authentication', 'jobs_access']
+            'steps_completed': ['configuration', 'authentication', 'jobs_access_attempted']
         }
 
     def _get_auth_suggestions(self, auth_result: Dict) -> List[str]:
