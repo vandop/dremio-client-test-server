@@ -259,19 +259,19 @@ setup_jdbc_driver() {
         fi
 
         if [ "$file_size" -gt 1000000 ]; then  # Check if file is larger than 1MB
-            print_status "JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
+            print_status "Flight SQL JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
             return 0
         else
-            print_warning "JDBC driver file exists but appears corrupted, re-downloading..."
-            rm -f "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+            print_warning "Flight SQL JDBC driver file exists but appears corrupted, re-downloading..."
+            rm -f "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
         fi
     fi
-    
-    print_info "Downloading Dremio JDBC driver..."
-    
-    # Download the JDBC driver
-    local download_url="https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar"
-    local temp_file="jdbc-drivers/dremio-jdbc-driver-LATEST.jar.tmp"
+
+    print_info "Downloading Apache Arrow Flight SQL JDBC driver..."
+
+    # Download the Flight SQL JDBC driver
+    local download_url="https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
+    local temp_file="jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar.tmp"
     
     if wget -q --show-progress -O "$temp_file" "$download_url"; then
         # Verify the download with cross-platform file size check

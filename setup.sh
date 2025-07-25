@@ -283,11 +283,8 @@ download_jdbc_driver() {
 
     print_info "Downloading Arrow Flight SQL JDBC driver..."
 =======
-    # Download Apache Arrow Flight SQL JDBC driver (preferred)
+    # Download Apache Arrow Flight SQL JDBC driver (modern, preferred)
     download_arrow_flight_sql_jdbc
-
-    # Download legacy Dremio JDBC driver as backup
-    download_legacy_dremio_jdbc
 }
 
 # Download Apache Arrow Flight SQL JDBC driver
@@ -349,70 +346,8 @@ download_arrow_flight_sql_jdbc() {
     fi
 }
 
-# Download legacy Dremio JDBC driver as backup
-download_legacy_dremio_jdbc() {
-    local dremio_jdbc_file="jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
-
-    # Check if legacy Dremio JDBC driver already exists
-    if [ -f "$dremio_jdbc_file" ]; then
-        local file_size=$(stat -c%s "$dremio_jdbc_file" 2>/dev/null || echo "0")
-        if [ "$file_size" -gt 1000000 ]; then  # Check if file is larger than 1MB (valid JAR)
-            print_status "Legacy Dremio JDBC driver already present ($(($file_size / 1024 / 1024))MB)"
-            return 0
-        else
-            print_warning "Legacy Dremio JDBC driver file exists but appears corrupted, re-downloading..."
-            rm -f "$dremio_jdbc_file"
-        fi
-    fi
-
-    print_info "Downloading legacy Dremio JDBC driver as backup..."
-
-    # Download the legacy Dremio JDBC driver
-    local download_url="https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar"
-    local temp_file="jdbc-drivers/dremio-jdbc-driver-LATEST.jar.tmp"
->>>>>>> origin/main
-
-    print_info "Downloading from: $download_url"
-    if wget -q --show-progress -O "$temp_file" "$download_url"; then
-        # Verify the download
-        local downloaded_size=$(stat -c%s "$temp_file" 2>/dev/null || echo "0")
-        if [ "$downloaded_size" -gt 1000000 ]; then  # Check if downloaded file is larger than 1MB
-<<<<<<< HEAD
-            mv "$temp_file" "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
-            print_status "Arrow Flight SQL JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
-
-            # Update README
-            update_jdbc_readme
-        else
-            rm -f "$temp_file"
-            print_error "Downloaded file appears to be corrupted or incomplete"
-            return 1
-        fi
-    else
-        rm -f "$temp_file"
-        print_error "Failed to download Arrow Flight SQL JDBC driver"
-        print_warning "You can manually download the driver from:"
-        print_info "https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar"
-        return 1
-    fi
-}
-
-=======
-            mv "$temp_file" "$dremio_jdbc_file"
-            print_status "Legacy Dremio JDBC driver downloaded successfully ($(($downloaded_size / 1024 / 1024))MB)"
-
-            # Create updated README
-            create_jdbc_readme
-        else
-            rm -f "$temp_file"
-            print_warning "Downloaded legacy Dremio JDBC driver appears to be corrupted or incomplete"
-        fi
-    else
-        rm -f "$temp_file"
-        print_warning "Failed to download legacy Dremio JDBC driver (not critical)"
-        print_info "Apache Arrow Flight SQL JDBC driver will be used instead"
-    fi
-}
+# Note: Legacy Dremio JDBC driver support removed
+# Only Apache Arrow Flight SQL JDBC driver is now supported for better performance and compatibility
 
 # Create JDBC drivers README
 create_jdbc_readme() {
@@ -438,29 +373,16 @@ The `flight-sql-jdbc-driver-17.0.0.jar` file is the Apache Arrow Flight SQL JDBC
 - **Size**: ~3-5MB
 - **Version**: 17.0.0
 
-## Legacy Dremio JDBC Driver (Backup)
-
-The `dremio-jdbc-driver-LATEST.jar` file is the legacy Dremio JDBC driver, kept as a backup option.
-
-### Download Information
-- **Source**: https://download.dremio.com/jdbc-driver/
-- **Auto-downloaded**: Downloaded as backup by the setup script
-- **Size**: ~45-50MB
-- **Version**: Latest available from Dremio
-
 ### Usage
-The Enhanced Dremio Reporting Server automatically detects and prioritizes the Apache Arrow Flight SQL JDBC driver when available. The legacy driver is used as a fallback if needed.
+The Enhanced Dremio Reporting Server uses the Apache Arrow Flight SQL JDBC driver for optimal performance and compatibility.
 
 ### Manual Download
 If you need to manually download or update the drivers:
 
 ```bash
 cd jdbc-drivers
-# Apache Arrow Flight SQL JDBC driver (preferred)
+# Apache Arrow Flight SQL JDBC driver
 wget https://repo1.maven.org/maven2/org/apache/arrow/flight-sql-jdbc-driver/17.0.0/flight-sql-jdbc-driver-17.0.0.jar
-
-# Legacy Dremio JDBC driver (backup)
-wget https://download.dremio.com/jdbc-driver/dremio-jdbc-driver-LATEST.jar
 ```
 
 ### Verification

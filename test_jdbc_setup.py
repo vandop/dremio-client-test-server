@@ -61,23 +61,35 @@ def test_jdbc_driver():
     print("\n📦 Testing JDBC Driver")
     print("=" * 50)
 
-    jar_path = "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+    # Prioritize Flight SQL JDBC driver
+    flight_sql_jar = "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
+    legacy_jar = "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
 
-    if os.path.exists(jar_path):
-        print(f"✅ JDBC driver found: {jar_path}")
-
-        # Check file size
-        size = os.path.getsize(jar_path)
-        print(f"   File size: {size:,} bytes ({size/1024/1024:.1f} MB)")
-
-        if size > 1024 * 1024:  # At least 1MB
-            print("✅ Driver file size looks reasonable")
-            return True
-        else:
-            print("⚠ Driver file seems too small")
-            return False
+    if os.path.exists(flight_sql_jar):
+        jar_path = flight_sql_jar
+        driver_type = "Apache Arrow Flight SQL JDBC"
+        print(f"✅ {driver_type} driver found: {jar_path}")
+    elif os.path.exists(legacy_jar):
+        jar_path = legacy_jar
+        driver_type = "Legacy Dremio JDBC"
+        print(f"✅ {driver_type} driver found: {jar_path}")
+        print("⚠️ Consider upgrading to Flight SQL JDBC driver for better performance")
     else:
-        print(f"❌ JDBC driver not found: {jar_path}")
+        print(f"❌ No JDBC driver found")
+        print(f"   Expected: {flight_sql_jar}")
+        print(f"   Or: {legacy_jar}")
+        print("   Run setup script to download: ./setup.sh")
+        return False
+
+    # Check file size
+    size = os.path.getsize(jar_path)
+    print(f"   File size: {size:,} bytes ({size/1024/1024:.1f} MB)")
+
+    if size > 1024 * 1024:  # At least 1MB
+        print("✅ Driver file size looks reasonable")
+        return True
+    else:
+        print("⚠ Driver file seems too small")
         return False
 
 
@@ -144,12 +156,20 @@ def test_jpype_startup():
 
         print(f"   JVM path: {jvm_path}")
 
-        # Start JVM with conservative settings for compatibility
+        # Start JVM with Apache Arrow Flight SQL JDBC driver requirements
+        # Apache Arrow requires specific module access for memory management
         jpype.startJVM(
             jvm_path,
             "-Xmx512m",  # Reasonable memory limit
             "-Xms128m",  # Small initial heap
             "-Djava.awt.headless=true",  # Headless mode
+            # Apache Arrow Flight SQL JDBC driver requirements
+            "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=org.apache.arrow.memory.core,ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=org.apache.arrow.memory.core,ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=org.apache.arrow.memory.core,ALL-UNNAMED",
+            "--add-opens=java.base/java.io=org.apache.arrow.memory.core,ALL-UNNAMED",
+            "--add-opens=java.base/java.util=org.apache.arrow.memory.core,ALL-UNNAMED",
             convertStrings=False,  # Don't auto-convert strings
         )
 
@@ -199,41 +219,81 @@ def test_jdbc_connection():
     try:
         import jaydebeapi
 
-        # Prepare JDBC URL with SSL troubleshooting options
-        if "api.dremio.cloud" in dremio_url:
-            # Try different JDBC URL configurations for SSL troubleshooting
-            jdbc_urls = [
-                # Standard Dremio Cloud JDBC URL
-                "jdbc:dremio:direct=data.dremio.cloud:443;ssl=true",
-                # With explicit SSL parameters
-                "jdbc:dremio:direct=data.dremio.cloud:443;ssl=true;useSSL=true",
-                # With SSL verification disabled (for testing only)
-                "jdbc:dremio:direct=data.dremio.cloud:443;ssl=true;disableCertificateVerification=true",
-                # Alternative endpoint
-                "jdbc:dremio:direct=sql.dremio.cloud:443;ssl=true",
-            ]
-        else:
-            jdbc_urls = [
-                dremio_url.replace("https://", "jdbc:dremio:direct=").replace(
-                    "http://", "jdbc:dremio:direct="
-                )
-                + ":31010"
-            ]
+        # Determine which JDBC driver to use first
+        flight_sql_jar = "jdbc-drivers/flight-sql-jdbc-driver-17.0.0.jar"
+        legacy_jar = "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
 
-        jar_path = "jdbc-drivers/dremio-jdbc-driver-LATEST.jar"
+        if os.path.exists(flight_sql_jar):
+            jar_path = flight_sql_jar
+            driver_class = "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver"
+            driver_type = "Flight SQL"
+            print(f"🔧 Using Apache Arrow Flight SQL JDBC driver: {jar_path}")
+        elif os.path.exists(legacy_jar):
+            jar_path = legacy_jar
+            driver_class = "com.dremio.jdbc.Driver"
+            driver_type = "Legacy Dremio"
+            print(f"🔧 Using Legacy Dremio JDBC driver: {jar_path}")
+        else:
+            print("❌ No JDBC driver found")
+            return False
+
+        # Generate JDBC URLs based on driver type
+        if driver_type == "Flight SQL":
+            if "api.dremio.cloud" in dremio_url:
+                # Flight SQL JDBC URLs for Dremio Cloud
+                import urllib.parse
+                encoded_pat = urllib.parse.quote(pat, safe="")
+                jdbc_urls = [
+                    f"jdbc:arrow-flight-sql://data.dremio.cloud:443?useEncryption=true&token={encoded_pat}",
+                ]
+            else:
+                # On-premise Flight SQL
+                jdbc_urls = [
+                    f"jdbc:arrow-flight-sql://{dremio_url.replace('https://', '').replace('http://', '')}:32010"
+                ]
+        else:
+            # Legacy Dremio JDBC URLs with SSL troubleshooting options
+            if "api.dremio.cloud" in dremio_url:
+                jdbc_urls = [
+                    "jdbc:dremio:direct=data.dremio.cloud:443;ssl=true",
+                    "jdbc:dremio:direct=data.dremio.cloud:443;ssl=true;useSSL=true",
+                    "jdbc:dremio:direct=data.dremio.cloud:443;ssl=true;disableCertificateVerification=true",
+                    "jdbc:dremio:direct=sql.dremio.cloud:443;ssl=true",
+                ]
+            else:
+                jdbc_urls = [
+                    dremio_url.replace("https://", "jdbc:dremio:direct=").replace(
+                        "http://", "jdbc:dremio:direct="
+                    )
+                    + ":31010"
+                ]
 
         print("🔐 Using Personal Access Token authentication")
-        print(f"🔧 JAR path: {jar_path}")
+        print(f"🔧 Driver: {driver_type}")
 
-        # Try different authentication approaches for Dremio Cloud
-        auth_configs = [
-            # Method 1: Standard Dremio Cloud PAT authentication
-            {"user": "$token", "password": pat},
-            # Method 2: Alternative PAT format
-            {"user": "dremio_cloud_pat", "password": pat},
-            # Method 3: Token-based authentication
-            {"user": "token", "password": pat},
-        ]
+        # Configure authentication based on driver type
+        if driver_type == "Flight SQL":
+            # Flight SQL JDBC uses token in URL
+            auth_configs = [{}]  # No separate auth needed, token in URL
+        else:
+            # Legacy Dremio JDBC uses separate auth
+            auth_configs = [
+                {"user": "$token", "password": pat},
+                {"user": "dremio_cloud_pat", "password": pat},
+                {"user": "token", "password": pat},
+            ]
+
+        # Add JDBC JAR to classpath before attempting connection
+        print(f"🔄 Adding JDBC JAR to classpath: {jar_path}")
+        try:
+            import jpype
+            if jpype.isJVMStarted():
+                jpype.addClassPath(jar_path)
+                print("✅ JAR added to classpath successfully")
+            else:
+                print("⚠️ JVM not started, JAR will be loaded by jaydebeapi.connect()")
+        except Exception as e:
+            print(f"⚠️ Could not add JAR to classpath: {e}")
 
         connection = None
         last_error = None
@@ -245,13 +305,22 @@ def test_jdbc_connection():
 
             for auth_idx, auth_config in enumerate(auth_configs, 1):
                 try:
-                    print(f"🔄 Auth method {auth_idx}: user='{auth_config['user']}'")
-                    connection = jaydebeapi.connect(
-                        "com.dremio.jdbc.Driver", jdbc_url, auth_config, jar_path
-                    )
+                    if driver_type == "Flight SQL":
+                        print(f"🔄 Flight SQL connection (token in URL)")
+                        connection = jaydebeapi.connect(
+                            driver_class, jdbc_url, auth_config, jar_path
+                        )
+                    else:
+                        print(f"🔄 Auth method {auth_idx}: user='{auth_config.get('user', 'N/A')}'")
+                        connection = jaydebeapi.connect(
+                            driver_class, jdbc_url, auth_config, jar_path
+                        )
                     print(f"✅ Connection successful!")
                     print(f"   URL: {jdbc_url}")
-                    print(f"   Auth: {auth_config['user']}")
+                    if driver_type == "Flight SQL":
+                        print(f"   Auth: Token in URL")
+                    else:
+                        print(f"   Auth: {auth_config.get('user', 'N/A')}")
                     successful_config = (jdbc_url, auth_config)
                     break
                 except Exception as e:

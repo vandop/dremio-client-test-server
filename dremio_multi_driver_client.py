@@ -450,7 +450,10 @@ class DremioMultiDriverClient:
                     # Apache Arrow Flight SQL JDBC driver requirements for Java 17+
                     "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED",
                     "--add-opens=java.base/sun.nio.ch=org.apache.arrow.memory.core,ALL-UNNAMED",
-                    "--add-opens=java.base/java.lang=ALL-UNNAMED",
+                    "--add-opens=java.base/java.lang=org.apache.arrow.memory.core,ALL-UNNAMED",
+                    "--add-opens=java.base/java.lang.reflect=org.apache.arrow.memory.core,ALL-UNNAMED",
+                    "--add-opens=java.base/java.io=org.apache.arrow.memory.core,ALL-UNNAMED",
+                    "--add-opens=java.base/java.util=org.apache.arrow.memory.core,ALL-UNNAMED",
                 ]
                 jpype.startJVM(classpath=[jar_path], *jvm_args)
                 logger.info(
