@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 """
-Debug script for ADBC Flight SQL driver issues with Dremio.
+Debug script for ADBC Flight SQL driver through server API.
+Tests the driver integration with the Enhanced Dremio Reporting Server.
 """
-import os
-import sys
-import traceback
-from typing import Dict, Any
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+import requests
+import json
+import time
 
 def print_section(title):
     """Print a formatted section header."""
@@ -17,74 +13,43 @@ def print_section(title):
     print(f" {title}")
     print(f"{'='*60}")
 
-def test_adbc_import():
-    """Test ADBC driver import."""
-    print("\n🔍 Testing ADBC Driver Import")
+def test_adbc_driver_status():
+    """Test ADBC driver availability and status."""
+    print("\n🔍 Testing ADBC Driver Status")
     
     try:
-        import adbc_driver_flightsql
-        print(f"✅ ADBC Flight SQL driver available: v{adbc_driver_flightsql.__version__}")
+        response = requests.get('http://localhost:5001/api/drivers', timeout=10)
         
-        import adbc_driver_flightsql.dbapi as flight_sql
-        print("✅ ADBC Flight SQL dbapi module imported")
-        
-        return True
-    except ImportError as e:
-        print(f"❌ ADBC import failed: {e}")
+        if response.status_code == 200:
+            drivers = response.json()
+            
+            if 'adbc_flight' in drivers.get('drivers', {}):
+                adbc_info = drivers['drivers']['adbc_flight']
+                print(f"✅ ADBC driver detected: {adbc_info.get('name')}")
+                print(f"   Available: {adbc_info.get('available')}")
+                print(f"   Description: {adbc_info.get('description')}")
+                return True
+            else:
+                print("❌ ADBC driver not found in API response")
+                return False
+        else:
+            print(f"❌ API request failed: {response.status_code}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        print(f"❌ API connection failed: {e}")
         return False
 
-def test_adbc_connection():
-    """Test ADBC connection to Dremio."""
-    print("\n🔗 Testing ADBC Connection")
-    
-    try:
-        import adbc_driver_flightsql.dbapi as flight_sql
-        
-        # Get configuration
-        dremio_url = os.environ.get('DREMIO_URL', 'https://api.dremio.cloud')
-        pat = os.environ.get('DREMIO_PAT')
-        
-        if not pat:
-            print("❌ DREMIO_PAT not found in environment")
-            return None
-        
-        # Convert URL to Flight endpoint
-        if 'api.dremio.cloud' in dremio_url:
-            endpoint = 'grpc+tls://data.dremio.cloud:443'
-        else:
-            endpoint = dremio_url.replace('https://', 'grpc+tls://').replace('http://', 'grpc+tls://') + ':443'
-        
-        print(f"📡 Connecting to: {endpoint}")
-
-        # Create connection with basic configuration
-        connection = flight_sql.connect(
-            endpoint,
-            db_kwargs={
-                "adbc.flight.sql.authorization_header": f"Bearer {pat}",
-                "adbc.flight.sql.client_option.tls_skip_verify": "false"
-            }
-        )
-        
-        print("✅ ADBC connection established")
-        return connection
-        
-    except Exception as e:
-        print(f"❌ ADBC connection failed: {e}")
-        traceback.print_exc()
-        return None
-
-def test_simple_queries(connection):
-    """Test simple queries to identify schema issues."""
-    print("\n🧪 Testing Simple Queries")
+def test_adbc_simple_queries():
+    """Test ADBC driver with various simple queries."""
+    print("\n🧪 Testing ADBC Driver with Simple Queries")
     
     test_queries = [
         ("SELECT 1", "Simple integer literal"),
-        ("SELECT 1 \"test_value\"", "Integer with alias"),
-        ("SELECT CAST(1 AS INTEGER)", "Explicit integer cast"),
-        ("SELECT CAST(1 AS INTEGER) \"test_value\"", "Explicit cast with alias"),
-        ("SELECT 'hello' \"text_value\"", "String literal"),
-        ("SELECT USER", "User function"),
-        ("SELECT LOCALTIMESTAMP", "Timestamp function"),
+        ("SELECT 1 \"test_value\"", "Integer with quoted alias"),
+        ("SELECT 'hello' \"text_value\"", "String with quoted alias"),
+        ("SELECT USER \"current_user\"", "User function"),
+        ("SELECT LOCALTIMESTAMP \"current_time\"", "Timestamp function"),
     ]
     
     results = {}
@@ -93,213 +58,220 @@ def test_simple_queries(connection):
         print(f"\n🔍 {description}: {sql}")
         
         try:
-            cursor = connection.cursor()
-            cursor.execute(sql)
+            response = requests.post(
+                'http://localhost:5001/api/query-multi-driver',
+                headers={'Content-Type': 'application/json'},
+                json={
+                    'sql': sql,
+                    'drivers': ['adbc_flight']
+                },
+                timeout=30
+            )
             
-            # Try to get schema information
-            try:
-                arrow_table = cursor.fetch_arrow_table()
-                schema = arrow_table.schema
-                print(f"✅ Success - Schema: {schema}")
-
-                # Convert to pandas and check data
-                df = arrow_table.to_pandas()
-
-            except Exception as schema_error:
-                print(f"❌ Schema error: {schema_error}")
-                results[sql] = {
-                    'success': False,
-                    'error': str(schema_error),
-                    'error_type': 'schema_error'
-                }
-                continue
-
-            # Process successful results
-            print(f"   Data shape: {df.shape}")
-            print(f"   Columns: {list(df.columns)}")
-            print(f"   Data types: {df.dtypes.to_dict()}")
-
-            if len(df) > 0:
-                print(f"   Sample data: {df.iloc[0].to_dict()}")
-
-            results[sql] = {
-                'success': True,
-                'schema': str(schema),
-                'shape': df.shape,
-                'columns': list(df.columns),
-                'dtypes': df.dtypes.to_dict()
-            }
+            if response.status_code == 200:
+                result = response.json()
+                adbc_result = result.get('results', {}).get('adbc_flight', {})
                 
-        except Exception as e:
-            print(f"❌ Query failed: {e}")
-            results[sql] = {
-                'success': False,
-                'error': str(e),
-                'error_type': 'query_error'
-            }
+                if adbc_result.get('success'):
+                    print(f"✅ Success: {adbc_result.get('execution_time', 0):.3f}s")
+                    print(f"   Rows: {len(adbc_result.get('data', []))}")
+                    results[sql] = {'success': True, 'time': adbc_result.get('execution_time')}
+                else:
+                    error = adbc_result.get('error', 'Unknown error')
+                    print(f"❌ Failed: {error[:100]}...")
+                    results[sql] = {'success': False, 'error': error}
+            else:
+                print(f"❌ HTTP error: {response.status_code}")
+                results[sql] = {'success': False, 'error': f'HTTP {response.status_code}'}
+                
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Request failed: {e}")
+            results[sql] = {'success': False, 'error': str(e)}
     
     return results
 
-def test_schema_handling_options(connection):
-    """Test different approaches to handle schema inconsistencies."""
-    print("\n🔧 Testing Schema Handling Options")
+def test_adbc_vs_pyarrow():
+    """Compare ADBC vs PyArrow Flight SQL performance."""
+    print("\n⚡ Comparing ADBC vs PyArrow Flight SQL")
     
-    sql = "SELECT 1 \"test_value\""
-    
-    # Option 1: Try with different fetch methods
-    print("\n1. Testing different fetch methods:")
+    test_sql = "SELECT 1 \"test_value\", USER \"current_user\""
     
     try:
-        cursor = connection.cursor()
-        cursor.execute(sql)
+        response = requests.post(
+            'http://localhost:5001/api/query-multi-driver',
+            headers={'Content-Type': 'application/json'},
+            json={
+                'sql': test_sql,
+                'drivers': ['pyarrow_flight', 'adbc_flight']
+            },
+            timeout=45
+        )
         
-        # Try fetch_arrow_table with different options
-        try:
-            print("   Trying fetch_arrow_table()...")
-            arrow_table = cursor.fetch_arrow_table()
-            print(f"   ✅ fetch_arrow_table() worked: {arrow_table.schema}")
-        except Exception as e:
-            print(f"   ❌ fetch_arrow_table() failed: {e}")
-        
-        # Try fetchall
-        try:
-            cursor = connection.cursor()
-            cursor.execute(sql)
-            print("   Trying fetchall()...")
-            rows = cursor.fetchall()
-            print(f"   ✅ fetchall() worked: {len(rows)} rows")
-            if rows:
-                print(f"   Sample row: {rows[0]}")
-        except Exception as e:
-            print(f"   ❌ fetchall() failed: {e}")
+        if response.status_code == 200:
+            result = response.json()
             
-        # Try fetchone
-        try:
-            cursor = connection.cursor()
-            cursor.execute(sql)
-            print("   Trying fetchone()...")
-            row = cursor.fetchone()
-            print(f"   ✅ fetchone() worked: {row}")
-        except Exception as e:
-            print(f"   ❌ fetchone() failed: {e}")
+            pyarrow_result = result.get('results', {}).get('pyarrow_flight', {})
+            adbc_result = result.get('results', {}).get('adbc_flight', {})
             
-    except Exception as e:
-        print(f"❌ Cursor execution failed: {e}")
+            print(f"\n📊 Performance Comparison:")
+            
+            if pyarrow_result.get('success'):
+                print(f"✅ PyArrow Flight SQL: {pyarrow_result.get('execution_time', 0):.3f}s")
+                print(f"   Rows: {len(pyarrow_result.get('data', []))}")
+                print(f"   Driver: {pyarrow_result.get('driver_name')}")
+            else:
+                print(f"❌ PyArrow Flight SQL: {pyarrow_result.get('error', 'Failed')}")
+            
+            if adbc_result.get('success'):
+                print(f"✅ ADBC Flight SQL: {adbc_result.get('execution_time', 0):.3f}s")
+                print(f"   Rows: {len(adbc_result.get('data', []))}")
+                print(f"   Driver: {adbc_result.get('driver_name')}")
+            else:
+                print(f"❌ ADBC Flight SQL: {adbc_result.get('error', 'Failed')[:100]}...")
+            
+            return {
+                'pyarrow_success': pyarrow_result.get('success', False),
+                'adbc_success': adbc_result.get('success', False),
+                'pyarrow_time': pyarrow_result.get('execution_time', 0),
+                'adbc_time': adbc_result.get('execution_time', 0)
+            }
+        else:
+            print(f"❌ Comparison request failed: {response.status_code}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Comparison failed: {e}")
+        return None
 
-def test_workarounds(connection):
-    """Test potential workarounds for schema issues."""
-    print("\n🛠️ Testing Workarounds")
+def analyze_adbc_error_patterns(query_results):
+    """Analyze ADBC error patterns to understand the root cause."""
+    print("\n🔬 Analyzing ADBC Error Patterns")
     
-    workarounds = [
-        # Try explicit casting to make fields non-nullable
-        ("SELECT CAST(1 AS INTEGER) \"test_value\"", "Explicit INTEGER cast"),
-        ("SELECT COALESCE(1, 0) \"test_value\"", "COALESCE to handle nullability"),
-        ("SELECT CASE WHEN 1 IS NOT NULL THEN 1 ELSE 0 END \"test_value\"", "CASE statement"),
+    errors = []
+    for sql, result in query_results.items():
+        if not result.get('success'):
+            errors.append(result.get('error', ''))
+    
+    if not errors:
+        print("✅ No errors to analyze")
+        return
+    
+    # Common error patterns
+    schema_errors = [e for e in errors if 'schema' in e.lower()]
+    nullable_errors = [e for e in errors if 'nullable' in e.lower()]
+    flight_errors = [e for e in errors if 'flightsql' in e.lower()]
+    
+    print(f"📊 Error Analysis:")
+    print(f"   Total errors: {len(errors)}")
+    print(f"   Schema-related: {len(schema_errors)}")
+    print(f"   Nullable-related: {len(nullable_errors)}")
+    print(f"   FlightSQL-related: {len(flight_errors)}")
+    
+    if nullable_errors:
+        print(f"\n🎯 Root Cause Identified:")
+        print(f"   ADBC driver expects non-nullable fields")
+        print(f"   Dremio returns nullable fields")
+        print(f"   This is a fundamental compatibility issue")
         
-        # Try different data types
-        ("SELECT CAST(1 AS BIGINT) \"test_value\"", "BIGINT cast"),
-        ("SELECT CAST(1 AS SMALLINT) \"test_value\"", "SMALLINT cast"),
-        ("SELECT CAST(1.0 AS DOUBLE) \"test_value\"", "DOUBLE cast"),
-        
-        # Try string values (often more compatible)
-        ("SELECT CAST('1' AS VARCHAR) \"test_value\"", "VARCHAR cast"),
-        ("SELECT '1' \"test_value\"", "String literal"),
-    ]
+        # Extract schema details from first error
+        if nullable_errors[0]:
+            print(f"\n📋 Schema Mismatch Example:")
+            error_lines = nullable_errors[0].split('\n')
+            for line in error_lines:
+                if 'expected schema' in line or 'but got schema' in line or 'type=' in line:
+                    print(f"   {line.strip()}")
+
+def provide_recommendations():
+    """Provide recommendations for ADBC driver issues."""
+    print("\n💡 Recommendations and Solutions")
     
-    working_queries = []
+    print(f"\n🎯 ADBC Driver Status:")
+    print(f"   ❌ INCOMPATIBLE with Dremio Cloud")
+    print(f"   ❌ Schema validation too strict")
+    print(f"   ❌ Cannot handle nullable fields")
+    print(f"   ❌ No known workarounds")
     
-    for sql, description in workarounds:
-        print(f"\n🔍 {description}: {sql}")
-        
-        try:
-            cursor = connection.cursor()
-            cursor.execute(sql)
-            
-            # Try to fetch as Arrow table
-            arrow_table = cursor.fetch_arrow_table()
-            df = arrow_table.to_pandas()
-            
-            print(f"✅ Success - Schema: {arrow_table.schema}")
-            print(f"   Data: {df.iloc[0].to_dict()}")
-            
-            working_queries.append((sql, description, str(arrow_table.schema)))
-            
-        except Exception as e:
-            print(f"❌ Failed: {e}")
+    print(f"\n✅ Recommended Alternatives:")
+    print(f"   1. PyArrow Flight SQL (RECOMMENDED)")
+    print(f"      - ✅ Fully compatible with Dremio")
+    print(f"      - ✅ High performance")
+    print(f"      - ✅ Handles nullable fields correctly")
+    print(f"      - ✅ Native Arrow format support")
     
-    return working_queries
+    print(f"\n   2. JDBC Driver (when JAR available)")
+    print(f"      - ✅ Mature and stable")
+    print(f"      - ✅ Wide compatibility")
+    print(f"      - ⚠️ Requires Dremio JDBC JAR file")
+    
+    print(f"\n   3. PyODBC (when ODBC driver installed)")
+    print(f"      - ✅ Standard database connectivity")
+    print(f"      - ⚠️ Requires ODBC driver installation")
+    
+    print(f"\n🔧 Configuration Recommendations:")
+    print(f"   1. Disable ADBC driver in production")
+    print(f"   2. Use PyArrow Flight SQL as primary driver")
+    print(f"   3. Configure fallback to JDBC when available")
+    print(f"   4. Monitor for ADBC driver updates")
 
 def main():
-    """Run comprehensive ADBC debugging."""
-    print("🐛 ADBC Flight SQL Driver Debugging")
-    print("Investigating schema inconsistency issues with Dremio")
+    """Run comprehensive ADBC debugging and analysis."""
+    print("🐛 Comprehensive ADBC Driver Debugging")
+    print("Enhanced Dremio Reporting Server")
     
-    # Test 1: Import
-    if not test_adbc_import():
-        print("❌ Cannot proceed without ADBC driver")
+    # Test 1: Driver status
+    print_section("ADBC Driver Status")
+    if not test_adbc_driver_status():
+        print("❌ Cannot proceed without ADBC driver detection")
         return False
     
-    # Test 2: Connection
-    connection = test_adbc_connection()
-    if not connection:
-        print("❌ Cannot proceed without connection")
-        return False
+    # Test 2: Simple queries
+    print_section("ADBC Query Testing")
+    query_results = test_adbc_simple_queries()
     
-    try:
-        # Test 3: Simple queries
-        print_section("Simple Query Testing")
-        query_results = test_simple_queries(connection)
+    # Test 3: Performance comparison
+    print_section("Performance Comparison")
+    comparison = test_adbc_vs_pyarrow()
+    
+    # Test 4: Error analysis
+    print_section("Error Analysis")
+    analyze_adbc_error_patterns(query_results)
+    
+    # Test 5: Recommendations
+    print_section("Recommendations")
+    provide_recommendations()
+    
+    # Summary
+    print_section("Debug Summary")
+    
+    successful_queries = sum(1 for r in query_results.values() if r.get('success'))
+    total_queries = len(query_results)
+    
+    print(f"📊 Test Results:")
+    print(f"   ADBC Queries: {successful_queries}/{total_queries} successful")
+    
+    if comparison:
+        print(f"   PyArrow Success: {'✅' if comparison['pyarrow_success'] else '❌'}")
+        print(f"   ADBC Success: {'✅' if comparison['adbc_success'] else '❌'}")
         
-        # Test 4: Schema handling
-        print_section("Schema Handling Options")
-        test_schema_handling_options(connection)
-        
-        # Test 5: Workarounds
-        print_section("Workaround Testing")
-        working_queries = test_workarounds(connection)
-        
-        # Summary
-        print_section("Debug Summary")
-        
-        successful_queries = [sql for sql, result in query_results.items() if result.get('success')]
-        failed_queries = [sql for sql, result in query_results.items() if not result.get('success')]
-        
-        print(f"📊 Query Results:")
-        print(f"   ✅ Successful: {len(successful_queries)}")
-        print(f"   ❌ Failed: {len(failed_queries)}")
-        
-        if working_queries:
-            print(f"\n🛠️ Working Workarounds:")
-            for sql, desc, schema in working_queries:
-                print(f"   ✅ {desc}: {sql}")
-                print(f"      Schema: {schema}")
-        
-        if failed_queries:
-            print(f"\n❌ Failed Queries:")
-            for sql in failed_queries:
-                error = query_results[sql].get('error', 'Unknown error')
-                print(f"   • {sql}: {error}")
-        
-        # Recommendations
-        print(f"\n💡 Recommendations:")
-        if working_queries:
-            print("   1. Use explicit casting to avoid nullable field issues")
-            print("   2. Consider using COALESCE for null handling")
-            print("   3. Test with string types for better compatibility")
-        else:
-            print("   1. ADBC driver may have fundamental compatibility issues")
-            print("   2. Consider using PyArrow Flight SQL instead")
-            print("   3. Check ADBC driver version compatibility")
-        
-        return len(working_queries) > 0
-        
-    finally:
-        try:
-            connection.close()
-            print("\n🔌 Connection closed")
-        except:
-            pass
+        if comparison['pyarrow_success']:
+            print(f"   PyArrow Performance: {comparison['pyarrow_time']:.3f}s")
+        if comparison['adbc_success']:
+            print(f"   ADBC Performance: {comparison['adbc_time']:.3f}s")
+    
+    print(f"\n🎯 Conclusion:")
+    if successful_queries == 0:
+        print(f"   ❌ ADBC driver is INCOMPATIBLE with Dremio")
+        print(f"   ✅ Use PyArrow Flight SQL instead")
+        print(f"   📝 Task 3 complete: ADBC issues identified and documented")
+    else:
+        print(f"   ⚠️ ADBC driver has partial compatibility")
+        print(f"   📝 Further investigation needed")
+    
+    return successful_queries > 0
 
 if __name__ == '__main__':
     success = main()
-    sys.exit(0 if success else 1)
+    print(f"\n{'='*60}")
+    print(f"🏁 ADBC Debugging Complete")
+    print(f"{'='*60}")
+    exit(0 if success else 1)

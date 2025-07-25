@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Test REST API integration with the multi-driver client.
+Comprehensive test script for REST API driver.
+Tests direct driver functionality including connection, queries, and error handling.
 """
 
 import sys

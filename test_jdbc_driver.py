@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test JDBC connection directly to Dremio using Arrow Flight SQL JDBC Driver.
-This script tests the JDBC setup by making direct connections to Dremio.
+Comprehensive test script for JDBC driver.
+Tests direct driver functionality including connection, queries, and error handling.
 """
 
 import os

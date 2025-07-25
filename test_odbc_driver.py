@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-
 """
-Test script to verify PyODBC TOKEN authentication fix
+Comprehensive test script for ODBC driver.
+Tests direct driver functionality including connection, queries, and error handling.
 """
 
 import os
