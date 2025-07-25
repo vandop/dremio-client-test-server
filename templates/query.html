@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,7 +14,7 @@
             margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        
+
         .query-editor {
             width: 100%;
             min-height: 150px;
@@ -24,34 +25,34 @@
             font-size: 14px;
             resize: vertical;
         }
-        
+
         .query-controls {
             margin: 15px 0;
             display: flex;
             gap: 10px;
             align-items: center;
         }
-        
+
         .query-controls input[type="number"] {
             width: 100px;
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
         }
-        
+
         .results-container {
             background: white;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        
+
         .results-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 14px;
         }
-        
+
         .results-table th,
         .results-table td {
             padding: 8px 12px;
@@ -62,25 +63,25 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        
+
         .results-table th {
             background-color: #f8f9fa;
             font-weight: 600;
             position: sticky;
             top: 0;
         }
-        
+
         .results-table td {
             font-family: monospace;
         }
-        
+
         .query-examples {
             background: #f8f9fa;
             padding: 15px;
             border-radius: 4px;
             margin-bottom: 20px;
         }
-        
+
         .example-query {
             background: white;
             padding: 10px;
@@ -90,11 +91,11 @@
             cursor: pointer;
             transition: background-color 0.2s;
         }
-        
+
         .example-query:hover {
             background-color: #f0f0f0;
         }
-        
+
         .example-query code {
             font-family: 'Courier New', monospace;
             font-size: 13px;
@@ -182,22 +183,29 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>🔍 SQL Query Interface</h1>
-            <nav>
-                <a href="/" class="btn btn-secondary">← Back to Home</a>
-                <a href="/reports" class="btn btn-secondary">View Reports</a>
-            </nav>
+            <div class="header-content">
+                <div class="header-main">
+                    <h1>🔍 SQL Query Interface</h1>
+                </div>
+                <nav>
+                    <a href="/" class="btn btn-secondary">← Back to Home</a>
+                    <a href="/reports" class="btn btn-secondary">View Reports</a>
+                    <button onclick="logout()" class="btn btn-logout">🚪 Logout</button>
+                </nav>
+            </div>
         </header>
 
         <main>
             <div class="query-examples">
                 <h3>📝 Example Queries</h3>
                 <p>Click on any example to load it into the editor:</p>
-                
-                <div class="example-query" onclick="loadExample(`SELECT 1 &quot;test_value&quot;, LOCALTIMESTAMP &quot;current_time&quot;`)">
+
+                <div class="example-query"
+                    onclick="loadExample(`SELECT 1 &quot;test_value&quot;, LOCALTIMESTAMP &quot;current_time&quot;`)">
                     <strong>Simple Test Query</strong><br>
                     <code>SELECT 1 "test_value", LOCALTIMESTAMP "current_time"</code>
                 </div>
@@ -207,47 +215,56 @@
                     <code>SHOW SCHEMAS</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT USER &quot;current_user&quot;, LOCALTIMESTAMP &quot;current_time&quot;`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT USER &quot;current_user&quot;, LOCALTIMESTAMP &quot;current_time&quot;`)">
                     <strong>Current User and Time</strong><br>
                     <code>SELECT USER "current_user", LOCALTIMESTAMP "current_time"</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT COUNT(*) &quot;total_schemas&quot; FROM INFORMATION_SCHEMA.SCHEMATA`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT COUNT(*) &quot;total_schemas&quot; FROM INFORMATION_SCHEMA.SCHEMATA`)">
                     <strong>Count Schemas</strong><br>
                     <code>SELECT COUNT(*) "total_schemas" FROM INFORMATION_SCHEMA.SCHEMATA</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT SCHEMA_NAME &quot;schema_name&quot; FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT SCHEMA_NAME &quot;schema_name&quot; FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10`)">
                     <strong>List Schema Names</strong><br>
                     <code>SELECT SCHEMA_NAME "schema_name" FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT 1 &quot;number&quot;, 'Hello Dremio' &quot;message&quot;, LOCALTIMESTAMP &quot;timestamp&quot;`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT 1 &quot;number&quot;, 'Hello Dremio' &quot;message&quot;, LOCALTIMESTAMP &quot;timestamp&quot;`)">
                     <strong>Mixed Data Types</strong><br>
                     <code>SELECT 1 "number", 'Hello Dremio' "message", LOCALTIMESTAMP "timestamp"</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT SCHEMA_NAME &quot;schema&quot;, CATALOG_NAME &quot;catalog&quot; FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE '%sys%' LIMIT 5`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT SCHEMA_NAME &quot;schema&quot;, CATALOG_NAME &quot;catalog&quot; FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE '%sys%' LIMIT 5`)">
                     <strong>Non-System Schemas</strong><br>
                     <code>SELECT SCHEMA_NAME "schema", CATALOG_NAME "catalog" FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT LIKE '%sys%' LIMIT 5</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT * FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; LIMIT 10`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT * FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; LIMIT 10`)">
                     <strong>Augment Usage Data</strong><br>
                     <code>SELECT * FROM "@vando.pereira@dremio.com"."augment-daily-usage" LIMIT 10</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT user_id, &quot;Date&quot;, completions_acceptance_rate_percentage FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; WHERE &quot;Date&quot; >= '2025-06-01' ORDER BY &quot;Date&quot; DESC LIMIT 10`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT user_id, &quot;Date&quot;, completions_acceptance_rate_percentage FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; WHERE &quot;Date&quot; >= '2025-06-01' ORDER BY &quot;Date&quot; DESC LIMIT 10`)">
                     <strong>Recent Usage by User</strong><br>
                     <code>SELECT user_id, "Date", completions_acceptance_rate_percentage FROM "@vando.pereira@dremio.com"."augment-daily-usage" WHERE "Date" >= '2025-06-01' ORDER BY "Date" DESC LIMIT 10</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT user_id, AVG(completions_acceptance_rate_percentage) &quot;avg_acceptance_rate&quot; FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; WHERE completions_total > 0 GROUP BY user_id ORDER BY AVG(completions_acceptance_rate_percentage) DESC LIMIT 10`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT user_id, AVG(completions_acceptance_rate_percentage) &quot;avg_acceptance_rate&quot; FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot; WHERE completions_total > 0 GROUP BY user_id ORDER BY AVG(completions_acceptance_rate_percentage) DESC LIMIT 10`)">
                     <strong>Top Performers by Acceptance Rate</strong><br>
                     <code>SELECT user_id, AVG(completions_acceptance_rate_percentage) "avg_acceptance_rate" FROM "@vando.pereira@dremio.com"."augment-daily-usage" WHERE completions_total > 0 GROUP BY user_id ORDER BY AVG(completions_acceptance_rate_percentage) DESC LIMIT 10</code>
                 </div>
 
-                <div class="example-query" onclick="loadExample(`SELECT COUNT(DISTINCT user_id) &quot;total_users&quot;, COUNT(*) &quot;total_records&quot;, MAX(&quot;Date&quot;) &quot;latest_date&quot;, MIN(&quot;Date&quot;) &quot;earliest_date&quot; FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot;`)">
+                <div class="example-query"
+                    onclick="loadExample(`SELECT COUNT(DISTINCT user_id) &quot;total_users&quot;, COUNT(*) &quot;total_records&quot;, MAX(&quot;Date&quot;) &quot;latest_date&quot;, MIN(&quot;Date&quot;) &quot;earliest_date&quot; FROM &quot;@vando.pereira@dremio.com&quot;.&quot;augment-daily-usage&quot;`)">
                     <strong>Usage Summary Statistics</strong><br>
                     <code>SELECT COUNT(DISTINCT user_id) "total_users", COUNT(*) "total_records", MAX("Date") "latest_date", MIN("Date") "earliest_date" FROM "@vando.pereira@dremio.com"."augment-daily-usage"</code>
                 </div>
@@ -258,16 +275,14 @@
                 <textarea id="queryEditor" class="query-editor" placeholder="Enter your Dremio SQL query here...
 
 Examples:
-SELECT 1 \"test_value\", LOCALTIMESTAMP \"current_time\"
-SHOW SCHEMAS
-SELECT USER \"current_user\"
-SELECT * FROM \"@vando.pereira@dremio.com\".\"augment-daily-usage\" LIMIT 10
-
-Note: Use double quotes for column aliases and reserved keywords like \"Date\" in Dremio"></textarea>
+SELECT 1 \" test_value\", LOCALTIMESTAMP \"current_time\" SHOW SCHEMAS SELECT USER \"current_user\" SELECT * FROM
+                    \"@vando.pereira@dremio.com\".\"augment-daily-usage\" LIMIT 10 Note: Use double quotes for column
+                    aliases and reserved keywords like \"Date\" in Dremio"></textarea>
 
                 <div class="query-controls">
                     <button onclick="executeQuery()" class="btn btn-primary">Execute Query (Single Driver)</button>
-                    <button onclick="executeQueryMultiDriver()" class="btn btn-success">Execute on Multiple Drivers</button>
+                    <button onclick="executeQueryMultiDriver()" class="btn btn-success">Execute on Multiple
+                        Drivers</button>
                     <label>
                         Limit:
                         <input type="number" id="limitInput" value="100" min="1" max="10000">
@@ -276,7 +291,8 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
                 </div>
 
                 <!-- Driver Selection -->
-                <div id="driverSelection" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+                <div id="driverSelection"
+                    style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
                     <h4>🔧 Select Drivers to Test:</h4>
                     <div id="driverCheckboxes">
                         <!-- Driver checkboxes will be populated here -->
@@ -298,7 +314,8 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
 
             <div id="results-container" style="display: none;">
                 <div class="results-container">
-                    <div id="results-header" style="padding: 15px; background-color: #f8f9fa; border-bottom: 1px solid #ddd;">
+                    <div id="results-header"
+                        style="padding: 15px; background-color: #f8f9fa; border-bottom: 1px solid #ddd;">
                         <h4 id="results-title">Query Results</h4>
                         <p id="results-info"></p>
                     </div>
@@ -317,7 +334,7 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
         let availableDrivers = {};
 
         // Load available drivers on page load
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             loadAvailableDrivers();
         });
 
@@ -348,7 +365,7 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
                 checkbox.value = driverKey;
                 checkbox.checked = driverKey === 'pyarrow_flight'; // Default to PyArrow Flight
 
-                checkbox.addEventListener('change', function() {
+                checkbox.addEventListener('change', function () {
                     if (this.checked) {
                         label.classList.add('checked');
                     } else {
@@ -374,7 +391,7 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
         async function executeQuery() {
             const sql = document.getElementById('queryEditor').value.trim();
             const limit = parseInt(document.getElementById('limitInput').value);
-            
+
             if (!sql) {
                 alert('Please enter a SQL query');
                 return;
@@ -483,19 +500,19 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
 
         function showError(result) {
             const errorDiv = document.getElementById('error-message');
-            
+
             let errorHtml = `<div class="error-details">
                 <h4>❌ Query Failed</h4>
                 <p><strong>Error:</strong> ${result.message}</p>`;
-            
+
             if (result.error_type) {
                 errorHtml += `<p><strong>Error Type:</strong> ${result.error_type}</p>`;
             }
-            
+
             if (result.query) {
                 errorHtml += `<p><strong>Query:</strong> <code>${result.query}</code></p>`;
             }
-            
+
             if (result.suggestions && result.suggestions.length > 0) {
                 errorHtml += '<div class="suggestions"><h5>Suggestions:</h5><ul>';
                 result.suggestions.forEach(suggestion => {
@@ -503,7 +520,7 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
                 });
                 errorHtml += '</ul></div>';
             }
-            
+
             errorHtml += '</div>';
             errorDiv.innerHTML = errorHtml;
             errorDiv.style.display = 'block';
@@ -673,15 +690,15 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
                     <div>
                         <h4>${statusIcon} ${driverResult.driver_name || driverKey}</h4>
                         ${driverResult.success ?
-                            `<p>Returned ${driverResult.row_count} rows in ${driverResult.execution_time.toFixed(3)}s</p>` :
-                            `<p>Error: ${driverResult.error}</p>`
-                        }
+                    `<p>Returned ${driverResult.row_count} rows in ${driverResult.execution_time.toFixed(3)}s</p>` :
+                    `<p>Error: ${driverResult.error}</p>`
+                }
                     </div>
                     <div class="driver-performance">
                         ${driverResult.success ?
-                            `<div>⚡ ${driverResult.execution_time.toFixed(3)}s</div><div>📊 ${driverResult.row_count} rows</div>` :
-                            `<div>💥 Failed</div>`
-                        }
+                    `<div>⚡ ${driverResult.execution_time.toFixed(3)}s</div><div>📊 ${driverResult.row_count} rows</div>` :
+                    `<div>💥 Failed</div>`
+                }
                     </div>
                 </div>
             `;
@@ -744,11 +761,28 @@ Note: Use double quotes for column aliases and reserved keywords like \"Date\" i
         }
 
         // Allow Ctrl+Enter to execute query
-        document.getElementById('queryEditor').addEventListener('keydown', function(e) {
+        document.getElementById('queryEditor').addEventListener('keydown', function (e) {
             if (e.ctrlKey && e.key === 'Enter') {
                 executeQuery();
             }
         });
+
+        async function logout() {
+            if (confirm('Are you sure you want to logout? You will need to reconfigure your Dremio connection.')) {
+                try {
+                    const response = await fetch('/clear-auth');
+                    if (response.ok) {
+                        window.location.href = '/auth';
+                    } else {
+                        alert('Logout failed. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    alert('Logout failed. Please try again.');
+                }
+            }
+        }
     </script>
 </body>
+
 </html>

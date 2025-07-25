@@ -1,23 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dremio Reporting Server</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>🚀 Hello World - Dremio Reporting Server</h1>
-            <p class="subtitle">Your gateway to Dremio Cloud analytics and reporting</p>
+            <div class="header-content">
+                <div class="header-main">
+                    <h1>🚀 Hello World - Dremio Reporting Server</h1>
+                    <p class="subtitle">Your gateway to Dremio Cloud analytics and reporting</p>
+                </div>
+                <div class="header-actions">
+                    <button onclick="logout()" class="btn btn-logout">🚪 Logout</button>
+                </div>
+            </div>
         </header>
 
         <main>
             <div class="welcome-section">
                 <h2>Welcome!</h2>
                 <p>This is a Flask-based web application ready to connect to Dremio Cloud and generate reports.</p>
-                
+
                 <div class="features">
                     <div class="feature-card">
                         <h3>🔍 SQL Query Interface</h3>
@@ -240,6 +249,23 @@
                 console.error('Projects loading error:', error);
             }
         }
+
+        async function logout() {
+            if (confirm('Are you sure you want to logout? You will need to reconfigure your Dremio connection.')) {
+                try {
+                    const response = await fetch('/clear-auth');
+                    if (response.ok) {
+                        window.location.href = '/auth';
+                    } else {
+                        alert('Logout failed. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    alert('Logout failed. Please try again.');
+                }
+            }
+        }
     </script>
 </body>
+
 </html>

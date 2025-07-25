@@ -1,18 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dremio Jobs Report - Dremio Reporting Server</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>📊 Dremio Jobs Report</h1>
-            <nav>
-                <a href="/" class="btn btn-secondary">← Back to Home</a>
-            </nav>
+            <div class="header-content">
+                <div class="header-main">
+                    <h1>📊 Dremio Jobs Report</h1>
+                </div>
+                <nav>
+                    <a href="/" class="btn btn-secondary">← Back to Home</a>
+                    <button onclick="logout()" class="btn btn-logout">🚪 Logout</button>
+                </nav>
+            </div>
         </header>
 
         <main>
@@ -87,7 +94,7 @@
 
         function displayJobs(jobs, count) {
             const container = document.getElementById('jobs-container');
-            
+
             if (jobs.length === 0) {
                 container.innerHTML = `
                     <div class="no-jobs">
@@ -124,9 +131,9 @@
 
             jobs.forEach(job => {
                 const startTime = job.startTime ? new Date(job.startTime).toLocaleString() : 'N/A';
-                const duration = job.endTime && job.startTime ? 
+                const duration = job.endTime && job.startTime ?
                     `${Math.round((new Date(job.endTime) - new Date(job.startTime)) / 1000)}s` : 'N/A';
-                
+
                 html += `
                     <tr class="job-row" onclick="showJobDetails('${job.id}')">
                         <td class="job-id">${job.id || 'N/A'}</td>
@@ -201,10 +208,27 @@
         }
 
         // Load jobs automatically when page loads
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // Uncomment the line below to auto-load jobs on page load
             // loadJobs();
         });
+
+        async function logout() {
+            if (confirm('Are you sure you want to logout? You will need to reconfigure your Dremio connection.')) {
+                try {
+                    const response = await fetch('/clear-auth');
+                    if (response.ok) {
+                        window.location.href = '/auth';
+                    } else {
+                        alert('Logout failed. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    alert('Logout failed. Please try again.');
+                }
+            }
+        }
     </script>
 </body>
+
 </html>

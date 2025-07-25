@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,7 +12,7 @@
             margin: 0 auto;
             padding: 20px;
         }
-        
+
         .debug-section {
             background: white;
             padding: 20px;
@@ -19,18 +20,18 @@
             margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        
+
         .form-group {
             margin-bottom: 15px;
         }
-        
+
         .form-group label {
             display: block;
             margin-bottom: 5px;
             font-weight: 600;
             color: #333;
         }
-        
+
         .form-group input,
         .form-group select {
             width: 100%;
@@ -39,20 +40,20 @@
             border-radius: 4px;
             font-size: 14px;
         }
-        
+
         .form-group input[type="password"] {
             font-family: monospace;
         }
-        
+
         .form-row {
             display: flex;
             gap: 15px;
         }
-        
+
         .form-row .form-group {
             flex: 1;
         }
-        
+
         .config-display {
             background: #f8f9fa;
             padding: 15px;
@@ -62,30 +63,30 @@
             font-size: 13px;
             white-space: pre-wrap;
         }
-        
+
         .projects-list {
             max-height: 200px;
             overflow-y: auto;
             border: 1px solid #ddd;
             border-radius: 4px;
         }
-        
+
         .project-item {
             padding: 10px;
             border-bottom: 1px solid #eee;
             cursor: pointer;
             transition: background-color 0.2s;
         }
-        
+
         .project-item:hover {
             background-color: #f0f0f0;
         }
-        
+
         .project-item.selected {
             background-color: #667eea;
             color: white;
         }
-        
+
         .status-indicator {
             display: inline-block;
             width: 12px;
@@ -93,26 +94,26 @@
             border-radius: 50%;
             margin-right: 8px;
         }
-        
+
         .status-success {
             background-color: #28a745;
         }
-        
+
         .status-error {
             background-color: #dc3545;
         }
-        
+
         .status-warning {
             background-color: #ffc107;
         }
-        
+
         .step-indicator {
             display: flex;
             justify-content: space-between;
             margin-bottom: 20px;
             padding: 0 20px;
         }
-        
+
         .step {
             flex: 1;
             text-align: center;
@@ -122,13 +123,13 @@
             background: #f8f9fa;
             border: 2px solid #dee2e6;
         }
-        
+
         .step.active {
             background: #667eea;
             color: white;
             border-color: #667eea;
         }
-        
+
         .step.completed {
             background: #28a745;
             color: white;
@@ -136,15 +137,21 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>🔧 Debug Configuration</h1>
-            <nav>
-                <a href="/" class="btn btn-secondary">← Back to Home</a>
-                <a href="/query" class="btn btn-secondary">SQL Query Interface</a>
-                <button onclick="resetConfig()" class="btn btn-warning">Reset to Defaults</button>
-            </nav>
+            <div class="header-content">
+                <div class="header-main">
+                    <h1>🔧 Debug Configuration</h1>
+                </div>
+                <nav>
+                    <a href="/" class="btn btn-secondary">← Back to Home</a>
+                    <a href="/query" class="btn btn-secondary">SQL Query Interface</a>
+                    <button onclick="resetConfig()" class="btn btn-warning">Reset to Defaults</button>
+                    <button onclick="logout()" class="btn btn-logout">🚪 Logout</button>
+                </nav>
+            </div>
         </header>
 
         <div class="debug-container">
@@ -171,8 +178,8 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="dremioUrl">Dremio URL:</label>
-                            <input type="url" id="dremioUrl" name="DREMIO_CLOUD_URL" 
-                                   placeholder="https://api.dremio.cloud">
+                            <input type="url" id="dremioUrl" name="DREMIO_CLOUD_URL"
+                                placeholder="https://api.dremio.cloud">
                         </div>
                         <div class="form-group">
                             <label for="dremioType">Dremio Type:</label>
@@ -182,32 +189,29 @@
                             </select>
                         </div>
                     </div>
-                    
+
                     <div class="form-row">
                         <div class="form-group">
                             <label for="username">Username:</label>
-                            <input type="text" id="username" name="DREMIO_USERNAME" 
-                                   placeholder="your-username">
+                            <input type="text" id="username" name="DREMIO_USERNAME" placeholder="your-username">
                         </div>
                         <div class="form-group">
                             <label for="password">Password:</label>
-                            <input type="password" id="password" name="DREMIO_PASSWORD" 
-                                   placeholder="your-password">
+                            <input type="password" id="password" name="DREMIO_PASSWORD" placeholder="your-password">
                         </div>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="pat">Personal Access Token (PAT) - Recommended:</label>
-                        <input type="password" id="pat" name="DREMIO_PAT" 
-                               placeholder="dremio_pat_...">
+                        <input type="password" id="pat" name="DREMIO_PAT" placeholder="dremio_pat_...">
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="projectId">Project ID (will be populated after testing):</label>
-                        <input type="text" id="projectId" name="DREMIO_PROJECT_ID" 
-                               placeholder="Will be set after fetching projects" readonly>
+                        <input type="text" id="projectId" name="DREMIO_PROJECT_ID"
+                            placeholder="Will be set after fetching projects" readonly>
                     </div>
-                    
+
                     <button type="button" onclick="updateConfig()" class="btn btn-primary">
                         Update Configuration
                     </button>
@@ -260,7 +264,7 @@
         let availableProjects = [];
 
         // Load initial configuration
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             loadCurrentConfig();
         });
 
@@ -268,7 +272,7 @@
             try {
                 const response = await fetch('/api/debug/config');
                 const result = await response.json();
-                
+
                 if (result.status === 'success') {
                     currentConfig = result.config;
                     updateFormFields();
@@ -300,7 +304,7 @@
                 'Project ID': currentConfig.project_id || 'Not set',
                 'SSL Verify': currentConfig.ssl_verify
             };
-            
+
             configDiv.textContent = JSON.stringify(displayConfig, null, 2);
         }
 
@@ -312,7 +316,7 @@
         async function updateConfig() {
             const formData = new FormData(document.getElementById('configForm'));
             const configData = {};
-            
+
             for (let [key, value] of formData.entries()) {
                 if (value.trim() !== '') {
                     configData[key] = value;
@@ -329,7 +333,7 @@
                 });
 
                 const result = await response.json();
-                
+
                 if (result.success) {
                     currentConfig = result.current_config;
                     updateConfigDisplay();
@@ -521,6 +525,23 @@
                 messageDiv.style.display = 'none';
             }, 5000);
         }
+
+        async function logout() {
+            if (confirm('Are you sure you want to logout? You will need to reconfigure your Dremio connection.')) {
+                try {
+                    const response = await fetch('/clear-auth');
+                    if (response.ok) {
+                        window.location.href = '/auth';
+                    } else {
+                        alert('Logout failed. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    alert('Logout failed. Please try again.');
+                }
+            }
+        }
     </script>
 </body>
+
 </html>

@@ -86,6 +86,17 @@ def auth():
     return render_template('auth.html', config=config)
 
 
+@app.route('/clear-auth')
+def clear_auth():
+    """Clear authentication and redirect to auth page."""
+    session.clear()
+    # Clear environment variables for this session
+    for key in ['DREMIO_CLOUD_URL', 'DREMIO_URL', 'DREMIO_PAT', 'DREMIO_USERNAME', 'DREMIO_PASSWORD', 'DREMIO_PROJECT_ID']:
+        os.environ.pop(key, None)
+
+    return redirect('/auth')
+
+
 
 
 
