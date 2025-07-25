@@ -1,5 +1,5 @@
 """
-Multi-driver Dremio client supporting PyArrow Flight, ADBC, PyODBC, and JDBC.
+Multi-driver Dremio client supporting PyArrow Flight, ADBC, PyODBC, JDBC, and REST API.
 """
 
 import logging
@@ -48,6 +48,11 @@ class DremioMultiDriverClient:
             "jdbc": {
                 "name": "JDBC (via JayDeBeApi)",
                 "available": self._check_jdbc(),
+                "client": None,
+            },
+            "rest_api": {
+                "name": "REST API",
+                "available": self._check_rest_api(),
                 "client": None,
             },
         }
@@ -121,6 +126,30 @@ class DremioMultiDriverClient:
 
         except ImportError as e:
             logger.info(f"JDBC dependencies not available: {e}")
+            return False
+
+    def _check_rest_api(self) -> bool:
+        """Check if REST API is available."""
+        try:
+            import requests
+            from dotenv import load_dotenv
+
+            # Load environment to check for required credentials
+            load_dotenv()
+
+            # Check for required configuration
+            base_url = os.getenv('DREMIO_CLOUD_URL')
+            pat = os.getenv('DREMIO_PAT')
+
+            if not base_url or not pat:
+                logger.info("REST API requires DREMIO_CLOUD_URL and DREMIO_PAT in environment")
+                return False
+
+            logger.info("REST API dependencies and configuration available")
+            return True
+
+        except ImportError as e:
+            logger.info(f"REST API dependencies not available: {e}")
             return False
 
     def get_available_drivers(self) -> Dict[str, Dict[str, Any]]:
@@ -546,6 +575,26 @@ class DremioMultiDriverClient:
 
             raise
 
+    def _create_rest_api_client(self):
+        """Create REST API client."""
+        if not self.drivers["rest_api"]["available"]:
+            raise ImportError("REST API not available")
+
+        from dremio_rest_sql_client import DremioRestSqlClient
+
+        # Apply configuration overrides
+        config_params = {}
+        if 'DREMIO_CLOUD_URL' in self.config_override:
+            config_params['base_url'] = self.config_override['DREMIO_CLOUD_URL']
+        if 'DREMIO_PAT' in self.config_override:
+            config_params['pat'] = self.config_override['DREMIO_PAT']
+        if 'DREMIO_PROJECT_ID' in self.config_override:
+            config_params['project_id'] = self.config_override['DREMIO_PROJECT_ID']
+
+        client = DremioRestSqlClient(**config_params)
+        self.drivers["rest_api"]["client"] = client
+        return client
+
     def _get_flight_sql_jdbc_configs(
         self, base_url: str, pat: str, auth_user: str, auth_pass: str, project_id: str
     ) -> List[Dict[str, Any]]:
@@ -695,6 +744,8 @@ class DremioMultiDriverClient:
             return self._execute_pyodbc(sql)
         elif driver_name == "jdbc":
             return self._execute_jdbc(sql)
+        elif driver_name == "rest_api":
+            return self._execute_rest_api(sql)
         else:
             raise ValueError(f"Unknown driver: {driver_name}")
 
@@ -898,6 +949,27 @@ class DremioMultiDriverClient:
             data.append(row_dict)
 
         return {"data": data, "row_count": len(data), "columns": columns}
+
+    def _execute_rest_api(self, sql: str) -> Dict[str, Any]:
+        """Execute query using REST API."""
+        if not self.drivers["rest_api"]["client"]:
+            self._create_rest_api_client()
+
+        client = self.drivers["rest_api"]["client"]
+        result = client.execute_query(sql)
+
+        if result["success"]:
+            # Convert REST API result format to match other drivers
+            rows = result["results"]["rows"]
+            columns = [col["name"] for col in result["results"]["schema"]]
+
+            return {
+                "data": rows,
+                "row_count": result["row_count"],
+                "columns": columns,
+            }
+        else:
+            raise Exception(result["error"])
 
     def get_projects(self) -> Dict[str, Any]:
         """Get projects using the most reliable method."""
