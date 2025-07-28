@@ -56,13 +56,16 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 RUN java -version && javac -version && echo "JAVA_HOME: $JAVA_HOME"
 RUN odbcinst -j
 
-# Install Dremio Arrow Flight SQL ODBC driver automatically
+# Install Dremio Arrow Flight SQL ODBC driver automatically (with error handling)
 RUN cd /tmp && \
-    # Download the latest Arrow Flight SQL ODBC driver
-    wget -q https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm && \
-    # Convert RPM to DEB and install
-    alien -d arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm && \
-    dpkg -i arrow-flight-sql-odbc-driver*.deb || apt-get install -f -y && \
+    # Download the latest Arrow Flight SQL ODBC driver with timeout and retries
+    (wget --timeout=30 --tries=3 -q https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm || \
+     echo "Warning: ODBC driver download failed, continuing without it") && \
+    # Convert RPM to DEB and install (only if RPM was downloaded)
+    if [ -f "arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm" ]; then \
+        alien -d arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm && \
+        (dpkg -i arrow-flight-sql-odbc-driver*.deb || apt-get install -f -y); \
+    fi && \
     # Find the driver library
     DRIVER_LIB=$(find /opt -name "libarrow*.so*" 2>/dev/null | grep -E "(odbc|flight)" | head -1) && \
     # Register the ODBC driver

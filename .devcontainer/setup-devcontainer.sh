@@ -223,7 +223,7 @@ FLASK_PORT=5000
 FLASK_DEBUG=true
 
 # Java Configuration (auto-detected in devcontainer)
-JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 EOF
         print_status ".env template created"
         print_warning "Please edit .env file with your Dremio credentials"
@@ -351,8 +351,14 @@ except Exception as e:
 main() {
     print_info "Starting devcontainer setup..."
     
-    # Set JAVA_HOME for this session
-    export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-arm64}
+    # Set JAVA_HOME for this session (auto-detect architecture)
+    if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+    elif [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
+    else
+        export JAVA_HOME=$(readlink -f $(which java) | sed "s:/bin/java::")
+    fi
     
     verify_java
     verify_python_deps

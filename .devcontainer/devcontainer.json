@@ -33,11 +33,16 @@
         }
     },
     "forwardPorts": [
-        5000
+        5000,
+        5001
     ],
     "portsAttributes": {
         "5000": {
-            "label": "Flask App",
+            "label": "Flask App (Legacy)",
+            "onAutoForward": "notify"
+        },
+        "5001": {
+            "label": "Dremio Reporting Server",
             "onAutoForward": "notify"
         }
     },
