@@ -1,34 +1,50 @@
 """
 Configuration management for Dremio connection and application settings.
 """
+
 import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
+
 class Config:
     """Application configuration class."""
-    
+
     # Flask configuration
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
-    DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    HOST = os.environ.get('FLASK_HOST', '0.0.0.0')
-    PORT = int(os.environ.get('FLASK_PORT', 5001))
-    
+    SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key-change-in-production"
+    DEBUG = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+
+    # Security warning for production
+    @classmethod
+    def validate_production_config(cls):
+        """Validate configuration for production deployment."""
+        warnings = []
+        if cls.DEBUG:
+            warnings.append("DEBUG mode is enabled - disable in production")
+        if cls.SECRET_KEY == "dev-secret-key-change-in-production":
+            warnings.append("Using default SECRET_KEY - change in production")
+        return warnings
+
+    HOST = os.environ.get("FLASK_HOST", "0.0.0.0")
+    PORT = int(os.environ.get("FLASK_PORT", 5001))
+
     # Dremio Cloud configuration
-    DREMIO_CLOUD_URL = os.environ.get('DREMIO_CLOUD_URL')
-    DREMIO_USERNAME = os.environ.get('DREMIO_USERNAME')
-    DREMIO_PASSWORD = os.environ.get('DREMIO_PASSWORD')
-    DREMIO_PROJECT_ID = os.environ.get('DREMIO_PROJECT_ID')
+    DREMIO_CLOUD_URL = os.environ.get("DREMIO_CLOUD_URL")
+    DREMIO_USERNAME = os.environ.get("DREMIO_USERNAME")
+    DREMIO_PASSWORD = os.environ.get("DREMIO_PASSWORD")
+    DREMIO_PROJECT_ID = os.environ.get("DREMIO_PROJECT_ID")
 
     # Dremio Cloud Personal Access Token (preferred for Dremio Cloud)
-    DREMIO_PAT = os.environ.get('DREMIO_PAT')
+    DREMIO_PAT = os.environ.get("DREMIO_PAT")
 
     # SSL/TLS Configuration
-    DREMIO_SSL_VERIFY = os.environ.get('DREMIO_SSL_VERIFY', 'true').lower() == 'true'
-    DREMIO_SSL_CERT_PATH = os.environ.get('DREMIO_SSL_CERT_PATH')  # Optional custom cert path
-    
+    DREMIO_SSL_VERIFY = os.environ.get("DREMIO_SSL_VERIFY", "true").lower() == "true"
+    DREMIO_SSL_CERT_PATH = os.environ.get(
+        "DREMIO_SSL_CERT_PATH"
+    )  # Optional custom cert path
+
     @classmethod
     def validate_dremio_config(cls):
         """Validate that all required Dremio configuration is present."""
@@ -44,7 +60,9 @@ class Config:
         has_username_password = bool(cls.DREMIO_USERNAME and cls.DREMIO_PASSWORD)
 
         # For Dremio Cloud (api.dremio.cloud), PAT is required
-        is_dremio_cloud = cls.DREMIO_CLOUD_URL and 'api.dremio.cloud' in cls.DREMIO_CLOUD_URL
+        is_dremio_cloud = (
+            cls.DREMIO_CLOUD_URL and "api.dremio.cloud" in cls.DREMIO_CLOUD_URL
+        )
 
         if is_dremio_cloud and not has_pat:
             raise ValueError(

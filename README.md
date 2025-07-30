@@ -13,6 +13,14 @@ A Flask-based web application for connecting to Dremio Cloud and generating repo
 - 🔒 **SSL Compatible**: Uses Apache Arrow Flight SQL JDBC driver (v17.0.0) for reliable SSL connections
 - 🔄 **Automatic Driver Selection**: Intelligently selects the best available driver
 
+## ⚠️ Security Notice
+
+**IMPORTANT**: This application handles sensitive Dremio Cloud credentials. Please:
+- Never commit `.env` files to version control
+- Use Personal Access Tokens (PAT) instead of passwords
+- Disable debug mode in production environments
+- Review logs before sharing as they may contain connection details
+
 ## Quick Start
 
 ### 1. Using DevContainer (Recommended)
