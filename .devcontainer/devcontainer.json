@@ -47,10 +47,7 @@
         }
     },
     "remoteUser": "vscode",
-    "workspaceFolder": "/workspace",
-    "mounts": [
-        "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
-    ],
+    "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
     "postCreateCommand": "bash -c 'if [ -f .devcontainer/setup-devcontainer.sh ]; then chmod +x .devcontainer/setup-devcontainer.sh && .devcontainer/setup-devcontainer.sh; elif [ -f setup-minimal.sh ]; then chmod +x setup-minimal.sh && ./setup-minimal.sh; else echo \"No setup script found, running basic setup...\"; pip install -r requirements.txt 2>/dev/null || echo \"Requirements install failed\"; chmod +x *.sh 2>/dev/null || true; fi'",
-    "postStartCommand": "echo '🚀 Dremio Reporting Server DevContainer Ready! Run ./run.sh to start the server.'"
+    "postStartCommand": "echo '🚀 Dremio Reporting Server DevContainer Ready!' && echo '📁 Workspace contents:' && ls -la && echo '🏃 Run ./run.sh to start the server.'"
 }
