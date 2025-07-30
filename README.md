@@ -2,6 +2,11 @@
 
 A Flask-based web application for connecting to Dremio Cloud and generating reports on job execution and analytics. Features modern Apache Arrow Flight SQL JDBC driver for reliable SSL connections and optimal performance.
 
+## Known Limitations
+1. Only Cloud + PAT tested so far
+2. Auth page is still not working properly, must use .env file for now
+3. Linux only environment are supported by all drivers (recommended docker/devconainer for development)
+
 ## Features
 
 - 🚀 **Hello World Web App**: Clean, responsive Flask application
