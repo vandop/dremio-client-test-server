@@ -6,6 +6,7 @@ A Flask-based web application for connecting to Dremio Cloud and generating repo
 1. Only Cloud + PAT tested so far
 2. Auth page is still not working properly, must use .env file for now
 3. Linux only environment are supported by all drivers (recommended docker/devconainer for development)
+4. PyODBC only works in isolation and will break other Flight sessions for a while (Investigating)
 
 ## Features
 
