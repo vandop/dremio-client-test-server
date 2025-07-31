@@ -111,6 +111,10 @@ def create_session_client():
     rest_client.username = config['username']
     rest_client.password = config['password']
 
+    # Set up authentication after setting the credentials
+    if config['pat']:
+        rest_client._setup_pat_auth()
+
     # Create PyArrow client with session config
     flight_client = DremioPyArrowClient()
     # Override the client's configuration with session values
@@ -119,6 +123,9 @@ def create_session_client():
     flight_client.pat = config['pat']
     flight_client.username = config['username']
     flight_client.password = config['password']
+
+    # Recalculate flight endpoint after setting base_url
+    flight_client.flight_endpoint = flight_client._get_flight_endpoint()
 
     # Create hybrid client with the configured clients
     from dremio_hybrid_client import DremioHybridClient
