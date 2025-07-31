@@ -37,24 +37,56 @@ def is_auth_configured():
 
 def get_session_config():
     """Get authentication configuration from session."""
-    return {
-        'dremio_url': session.get('dremio_url'),
-        'project_id': session.get('project_id'),
-        'auth_method': session.get('auth_method'),
-        'pat': session.get('pat'),
-        'username': session.get('username'),
-        'password': session.get('password'),
-        'dremio_type': session.get('dremio_type')
-    }
+    try:
+        # Only access session if we're in a request context
+        from flask import has_request_context
+        if not has_request_context():
+            return {
+                'dremio_url': None,
+                'project_id': None,
+                'auth_method': None,
+                'pat': None,
+                'username': None,
+                'password': None,
+                'dremio_type': None
+            }
+
+        return {
+            'dremio_url': session.get('dremio_url'),
+            'project_id': session.get('project_id'),
+            'auth_method': session.get('auth_method'),
+            'pat': session.get('pat'),
+            'username': session.get('username'),
+            'password': session.get('password'),
+            'dremio_type': session.get('dremio_type')
+        }
+    except RuntimeError:
+        # Fallback if session is not available
+        return {
+            'dremio_url': None,
+            'project_id': None,
+            'auth_method': None,
+            'pat': None,
+            'username': None,
+            'password': None,
+            'dremio_type': None
+        }
 
 
 def has_session_auth():
     """Check if session has valid authentication data."""
-    config = get_session_config()
-    has_url = bool(config['dremio_url'])
-    has_pat = bool(config['pat'])
-    has_credentials = bool(config['username'] and config['password'])
-    return has_url and (has_pat or has_credentials)
+    try:
+        from flask import has_request_context
+        if not has_request_context():
+            return False
+
+        config = get_session_config()
+        has_url = bool(config['dremio_url'])
+        has_pat = bool(config['pat'])
+        has_credentials = bool(config['username'] and config['password'])
+        return has_url and (has_pat or has_credentials)
+    except RuntimeError:
+        return False
 
 
 def create_session_client():
@@ -63,44 +95,66 @@ def create_session_client():
         # Fallback to environment-based client if no session auth
         return DremioHybridClient()
 
-    # Temporarily set environment variables for this client creation
+    # Get session configuration
     config = get_session_config()
-    original_env = {}
 
-    try:
-        # Store original values
-        env_keys = ['DREMIO_CLOUD_URL', 'DREMIO_URL', 'DREMIO_PROJECT_ID', 'DREMIO_PAT', 'DREMIO_USERNAME', 'DREMIO_PASSWORD']
-        for key in env_keys:
-            original_env[key] = os.environ.get(key)
+    # The issue is that Config class reads environment variables at import time
+    # We need to reload the config module with new environment variables
+    import importlib
+    import contextlib
 
-        # Set session values
-        if config['dremio_url']:
-            os.environ['DREMIO_CLOUD_URL'] = config['dremio_url']
-            os.environ['DREMIO_URL'] = config['dremio_url']
-        if config['project_id']:
-            os.environ['DREMIO_PROJECT_ID'] = config['project_id']
-        if config['pat']:
-            os.environ['DREMIO_PAT'] = config['pat']
-            # Clear username/password when using PAT
-            os.environ.pop('DREMIO_USERNAME', None)
-            os.environ.pop('DREMIO_PASSWORD', None)
-        elif config['username'] and config['password']:
-            os.environ['DREMIO_USERNAME'] = config['username']
-            os.environ['DREMIO_PASSWORD'] = config['password']
-            # Clear PAT when using username/password
-            os.environ.pop('DREMIO_PAT', None)
+    @contextlib.contextmanager
+    def temp_env_and_config_context(env_vars):
+        """Context manager to temporarily set environment variables and reload config."""
+        original_env = {}
+        try:
+            # Store original values
+            for key, value in env_vars.items():
+                original_env[key] = os.environ.get(key)
+                if value is not None:
+                    os.environ[key] = value
+                elif key in os.environ:
+                    del os.environ[key]
 
-        # Create client with session config
+            # Reload config module to pick up new environment variables
+            import config
+            importlib.reload(config)
+
+            yield
+        finally:
+            # Restore original environment variables
+            for key, original_value in original_env.items():
+                if original_value is not None:
+                    os.environ[key] = original_value
+                elif key in os.environ:
+                    del os.environ[key]
+
+            # Reload config again to restore original values
+            import config
+            importlib.reload(config)
+
+    # Prepare environment variables for session config
+    env_vars = {}
+    if config['dremio_url']:
+        env_vars['DREMIO_CLOUD_URL'] = config['dremio_url']
+        env_vars['DREMIO_URL'] = config['dremio_url']
+    if config['project_id']:
+        env_vars['DREMIO_PROJECT_ID'] = config['project_id']
+    if config['pat']:
+        env_vars['DREMIO_PAT'] = config['pat']
+        # Clear username/password when using PAT
+        env_vars['DREMIO_USERNAME'] = ''
+        env_vars['DREMIO_PASSWORD'] = ''
+    elif config['username'] and config['password']:
+        env_vars['DREMIO_USERNAME'] = config['username']
+        env_vars['DREMIO_PASSWORD'] = config['password']
+        # Clear PAT when using username/password
+        env_vars['DREMIO_PAT'] = ''
+
+    # Create client with temporary environment and config context
+    with temp_env_and_config_context(env_vars):
         client = DremioHybridClient()
         return client
-
-    finally:
-        # Restore original environment variables
-        for key, value in original_env.items():
-            if value is not None:
-                os.environ[key] = value
-            else:
-                os.environ.pop(key, None)
 
 
 def get_current_config():
@@ -708,10 +762,11 @@ if __name__ == '__main__':
     # Check if Dremio configuration is available
     try:
         Config.validate_dremio_config()
-        print("✓ Dremio configuration validated")
+        print("✓ Dremio configuration validated from .env file")
     except ValueError as e:
-        print(f"⚠ Warning: {e}")
-        print("The server will start but Dremio features may not work.")
+        print(f"⚠ No .env file configuration found")
+        print("✓ Session-based authentication will be used")
+        print("  Navigate to http://localhost:5001/auth to configure credentials")
 
     app.run(
         host=Config.HOST,
