@@ -12,17 +12,17 @@ app = Flask(__name__)
 app.config.from_object(Config)
 app.secret_key = os.environ.get('SECRET_KEY', 'debug-secret-key-change-in-production')
 
-# Initialize Dremio hybrid client (Flight SQL + REST API)
-dremio_client = DremioHybridClient()
+# Global client will be initialized per session
+dremio_client = None
 
 
 def is_auth_configured():
     """Check if authentication is properly configured."""
-    # Check session first
+    # Check session first (priority for session-based auth)
     if session.get('auth_configured'):
         return True
 
-    # Check environment variables
+    # Fallback: Check environment variables (for .env file compatibility)
     dremio_url = os.environ.get('DREMIO_CLOUD_URL') or os.environ.get('DREMIO_URL')
     pat = os.environ.get('DREMIO_PAT')
     username = os.environ.get('DREMIO_USERNAME')
@@ -35,14 +35,87 @@ def is_auth_configured():
     return has_url and has_auth
 
 
+def get_session_config():
+    """Get authentication configuration from session."""
+    return {
+        'dremio_url': session.get('dremio_url'),
+        'project_id': session.get('project_id'),
+        'auth_method': session.get('auth_method'),
+        'pat': session.get('pat'),
+        'username': session.get('username'),
+        'password': session.get('password'),
+        'dremio_type': session.get('dremio_type')
+    }
+
+
+def has_session_auth():
+    """Check if session has valid authentication data."""
+    config = get_session_config()
+    has_url = bool(config['dremio_url'])
+    has_pat = bool(config['pat'])
+    has_credentials = bool(config['username'] and config['password'])
+    return has_url and (has_pat or has_credentials)
+
+
+def create_session_client():
+    """Create a Dremio client using session-based configuration."""
+    if not has_session_auth():
+        # Fallback to environment-based client if no session auth
+        return DremioHybridClient()
+
+    # Temporarily set environment variables for this client creation
+    config = get_session_config()
+    original_env = {}
+
+    try:
+        # Store original values
+        env_keys = ['DREMIO_CLOUD_URL', 'DREMIO_URL', 'DREMIO_PROJECT_ID', 'DREMIO_PAT', 'DREMIO_USERNAME', 'DREMIO_PASSWORD']
+        for key in env_keys:
+            original_env[key] = os.environ.get(key)
+
+        # Set session values
+        if config['dremio_url']:
+            os.environ['DREMIO_CLOUD_URL'] = config['dremio_url']
+            os.environ['DREMIO_URL'] = config['dremio_url']
+        if config['project_id']:
+            os.environ['DREMIO_PROJECT_ID'] = config['project_id']
+        if config['pat']:
+            os.environ['DREMIO_PAT'] = config['pat']
+            # Clear username/password when using PAT
+            os.environ.pop('DREMIO_USERNAME', None)
+            os.environ.pop('DREMIO_PASSWORD', None)
+        elif config['username'] and config['password']:
+            os.environ['DREMIO_USERNAME'] = config['username']
+            os.environ['DREMIO_PASSWORD'] = config['password']
+            # Clear PAT when using username/password
+            os.environ.pop('DREMIO_PAT', None)
+
+        # Create client with session config
+        client = DremioHybridClient()
+        return client
+
+    finally:
+        # Restore original environment variables
+        for key, value in original_env.items():
+            if value is not None:
+                os.environ[key] = value
+            else:
+                os.environ.pop(key, None)
+
+
 def get_current_config():
     """Get current configuration for pre-populating the form."""
+    # Prioritize session data, fallback to environment variables
+    session_config = get_session_config()
+
     return {
-        'dremio_url': os.environ.get('DREMIO_CLOUD_URL') or os.environ.get('DREMIO_URL', ''),
-        'project_id': os.environ.get('DREMIO_PROJECT_ID', ''),
-        'username': os.environ.get('DREMIO_USERNAME', ''),
-        'password': os.environ.get('DREMIO_PASSWORD', ''),
-        'pat': os.environ.get('DREMIO_PAT', '')
+        'dremio_url': session_config['dremio_url'] or os.environ.get('DREMIO_CLOUD_URL') or os.environ.get('DREMIO_URL', ''),
+        'project_id': session_config['project_id'] or os.environ.get('DREMIO_PROJECT_ID', ''),
+        'username': session_config['username'] or os.environ.get('DREMIO_USERNAME', ''),
+        'password': session_config['password'] or os.environ.get('DREMIO_PASSWORD', ''),
+        'pat': session_config['pat'] or os.environ.get('DREMIO_PAT', ''),
+        'auth_method': session_config['auth_method'] or ('pat' if os.environ.get('DREMIO_PAT') else 'credentials'),
+        'dremio_type': session_config['dremio_type'] or ('cloud' if 'api.dremio.cloud' in (session_config['dremio_url'] or os.environ.get('DREMIO_CLOUD_URL', '')) else 'software')
     }
 
 
@@ -89,10 +162,11 @@ def auth():
 @app.route('/clear-auth')
 def clear_auth():
     """Clear authentication and redirect to auth page."""
+    # Clear all session data
     session.clear()
-    # Clear environment variables for this session
-    for key in ['DREMIO_CLOUD_URL', 'DREMIO_URL', 'DREMIO_PAT', 'DREMIO_USERNAME', 'DREMIO_PASSWORD', 'DREMIO_PROJECT_ID']:
-        os.environ.pop(key, None)
+
+    # Note: We don't clear environment variables anymore since we use session-based auth
+    # This allows multiple users to have different credentials simultaneously
 
     return redirect('/auth')
 
@@ -122,12 +196,13 @@ def configure_auth():
                 'error': 'URL must start with http:// or https://'
             })
 
-        # Set environment variables for this session
-        os.environ['DREMIO_CLOUD_URL'] = dremio_url
-        os.environ['DREMIO_URL'] = dremio_url
+        # Store credentials in session (not environment variables)
+        session['dremio_url'] = dremio_url
+        session['dremio_type'] = dremio_type
+        session['auth_method'] = auth_method
 
         if project_id:
-            os.environ['DREMIO_PROJECT_ID'] = project_id
+            session['project_id'] = project_id
 
         if auth_method == 'pat':
             pat = request.form.get('pat')
@@ -136,10 +211,10 @@ def configure_auth():
                     'success': False,
                     'error': 'Personal Access Token is required'
                 })
-            os.environ['DREMIO_PAT'] = pat
-            # Clear username/password
-            os.environ.pop('DREMIO_USERNAME', None)
-            os.environ.pop('DREMIO_PASSWORD', None)
+            session['pat'] = pat
+            # Clear username/password from session
+            session.pop('username', None)
+            session.pop('password', None)
 
         elif auth_method == 'credentials':
             username = request.form.get('username')
@@ -149,19 +224,18 @@ def configure_auth():
                     'success': False,
                     'error': 'Username and password are required'
                 })
-            os.environ['DREMIO_USERNAME'] = username
-            os.environ['DREMIO_PASSWORD'] = password
-            # Clear PAT
-            os.environ.pop('DREMIO_PAT', None)
+            session['username'] = username
+            session['password'] = password
+            # Clear PAT from session
+            session.pop('pat', None)
 
-        # Test the connection
+        # Test the connection using session-based client
         try:
-            # Reinitialize the client with new config
-            global dremio_client
-            dremio_client = DremioHybridClient()
+            # Create client with session configuration
+            session_client = create_session_client()
 
             # Test connection
-            result = dremio_client.test_connection()
+            result = session_client.test_connection()
 
             if result.get('status') == 'success':
                 # Mark as configured in session
@@ -200,7 +274,9 @@ def test_connection():
         }), 401
 
     try:
-        result = dremio_client.test_connection()
+        # Use session-based client
+        session_client = create_session_client()
+        result = session_client.test_connection()
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -220,7 +296,9 @@ def get_jobs():
 
     try:
         limit = request.args.get('limit', 50, type=int)
-        result = dremio_client.get_jobs(limit=limit)
+        # Use session-based client
+        session_client = create_session_client()
+        result = session_client.get_jobs(limit=limit)
 
         if result['success']:
             return jsonify({
@@ -257,7 +335,9 @@ def get_job_details(job_id):
         }), 401
 
     try:
-        job_details = dremio_client.get_job_details(job_id)
+        # Use session-based client
+        session_client = create_session_client()
+        job_details = session_client.get_job_details(job_id)
         
         if job_details:
             return jsonify({
@@ -287,7 +367,9 @@ def get_projects():
         }), 401
 
     try:
-        result = dremio_client.get_projects()
+        # Use session-based client
+        session_client = create_session_client()
+        result = session_client.get_projects()
 
         if result['success']:
             return jsonify({
@@ -339,7 +421,9 @@ def execute_query():
         if limit and 'LIMIT' not in sql.upper() and sql.strip().upper().startswith('SELECT'):
             sql = f"{sql} LIMIT {limit}"
 
-        result = dremio_client.execute_query(sql)
+        # Use session-based client
+        session_client = create_session_client()
+        result = session_client.execute_query(sql)
 
         if result['success']:
             return jsonify({
@@ -487,7 +571,9 @@ def get_schemas():
         }), 401
 
     try:
-        result = dremio_client.get_schemas()
+        # Use session-based client
+        session_client = create_session_client()
+        result = session_client.get_schemas()
 
         if result['success']:
             return jsonify({
