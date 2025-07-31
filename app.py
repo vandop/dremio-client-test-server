@@ -98,32 +98,36 @@ def create_session_client():
     # Get session configuration
     config = get_session_config()
 
-    # Set environment variables permanently for this session
-    # (they will be overridden by the next session-based client creation)
-    if config['dremio_url']:
-        os.environ['DREMIO_CLOUD_URL'] = config['dremio_url']
-        os.environ['DREMIO_URL'] = config['dremio_url']
-    if config['project_id']:
-        os.environ['DREMIO_PROJECT_ID'] = config['project_id']
-    if config['pat']:
-        os.environ['DREMIO_PAT'] = config['pat']
-        # Clear username/password when using PAT
-        os.environ.pop('DREMIO_USERNAME', None)
-        os.environ.pop('DREMIO_PASSWORD', None)
-    elif config['username'] and config['password']:
-        os.environ['DREMIO_USERNAME'] = config['username']
-        os.environ['DREMIO_PASSWORD'] = config['password']
-        # Clear PAT when using username/password
-        os.environ.pop('DREMIO_PAT', None)
+    # Create a custom client that bypasses the Config class
+    from dremio_client import DremioClient
+    from dremio_pyarrow_client import DremioPyArrowClient
 
-    # Reload config module to pick up new environment variables
-    import importlib
-    import config
-    importlib.reload(config)
+    # Create REST API client with session config
+    rest_client = DremioClient()
+    # Override the client's configuration with session values
+    rest_client.base_url = config['dremio_url']
+    rest_client.project_id = config['project_id']
+    rest_client.pat = config['pat']
+    rest_client.username = config['username']
+    rest_client.password = config['password']
 
-    # Create client with updated configuration
-    client = DremioHybridClient()
-    return client
+    # Create PyArrow client with session config
+    flight_client = DremioPyArrowClient()
+    # Override the client's configuration with session values
+    flight_client.base_url = config['dremio_url']
+    flight_client.project_id = config['project_id']
+    flight_client.pat = config['pat']
+    flight_client.username = config['username']
+    flight_client.password = config['password']
+
+    # Create hybrid client with the configured clients
+    from dremio_hybrid_client import DremioHybridClient
+    hybrid_client = DremioHybridClient()
+    # Replace the clients with our session-configured ones
+    hybrid_client.rest_client = rest_client
+    hybrid_client.flight_client = flight_client
+
+    return hybrid_client
 
 
 def get_current_config():
