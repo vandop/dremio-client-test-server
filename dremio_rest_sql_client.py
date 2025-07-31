@@ -66,10 +66,10 @@ class DremioRestSqlClient:
         self.project_id = project_id or os.getenv("DREMIO_PROJECT_ID")
 
         # Determine if this is Dremio Cloud or Dremio Software
-        self.is_cloud = "dremio.cloud" in self.base_url
+        self.is_cloud = self.base_url and "dremio.cloud" in self.base_url
 
         # Format base URL based on deployment type
-        if self.base_url.endswith("/"):
+        if self.base_url and self.base_url.endswith("/"):
             self.base_url = self.base_url.rstrip("/")
 
         if self.is_cloud:

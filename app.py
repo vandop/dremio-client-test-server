@@ -288,8 +288,8 @@ def configure_auth():
             # Create client with session configuration
             session_client = create_session_client()
 
-            # Test connection
-            result = session_client.test_connection()
+            # Test connection (skip config validation since we're using session-based auth)
+            result = session_client.test_connection(skip_config_validation=True)
 
             if result.get('status') == 'success':
                 # Mark as configured in session
@@ -330,7 +330,9 @@ def test_connection():
     try:
         # Use session-based client
         session_client = create_session_client()
-        result = session_client.test_connection()
+        # Skip config validation if using session-based auth
+        skip_validation = has_session_auth()
+        result = session_client.test_connection(skip_config_validation=skip_validation)
         return jsonify(result)
     except Exception as e:
         return jsonify({

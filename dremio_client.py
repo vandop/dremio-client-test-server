@@ -68,7 +68,7 @@ class DremioClient:
             return corrected_url
 
         # Check if it's a custom domain that might need API prefix
-        if 'dremio.cloud' in url and not url.startswith('https://api.'):
+        if url and 'dremio.cloud' in url and not url.startswith('https://api.'):
             # Extract the domain part and add api prefix
             if url.startswith('https://'):
                 domain_part = url[8:]  # Remove https://
@@ -229,7 +229,7 @@ class DremioClient:
             Dictionary with authentication status and detailed error information
         """
         # Check if this is Dremio Cloud
-        is_dremio_cloud = 'api.dremio.cloud' in self.base_url
+        is_dremio_cloud = self.base_url and 'api.dremio.cloud' in self.base_url
 
         if is_dremio_cloud and not self.pat:
             return {
@@ -384,7 +384,7 @@ class DremioClient:
 
         for endpoint in auth_endpoints:
             try:
-                auth_url = f"{self.base_url.rstrip('/')}{endpoint}"
+                auth_url = f"{self.base_url.rstrip('/') if self.base_url else ''}{endpoint}"
                 auth_data = {
                     "userName": self.username,
                     "password": self.password
@@ -657,40 +657,47 @@ class DremioClient:
             print(f"Failed to retrieve job {job_id}: {e}")
             return None
     
-    def test_connection(self) -> Dict[str, any]:
+    def test_connection(self, skip_config_validation=False) -> Dict[str, any]:
         """
         Test the connection to Dremio Cloud with detailed diagnostics.
+
+        Args:
+            skip_config_validation: If True, skip environment variable validation
+                                  (useful for session-based authentication)
 
         Returns:
             Dictionary with connection status and detailed diagnostic information
         """
         logger.info("=== Starting Dremio Connection Test ===")
 
-        # Step 1: Validate configuration
-        try:
-            Config.validate_dremio_config()
-            logger.info("✓ Configuration validation passed")
-        except ValueError as e:
-            error_msg = str(e)
-            logger.error(f"✗ Configuration validation failed: {error_msg}")
-            return {
-                'status': 'error',
-                'step': 'configuration',
-                'message': error_msg,
-                'details': {
-                    'current_config': {
-                        'DREMIO_CLOUD_URL': Config.DREMIO_CLOUD_URL or 'NOT SET',
-                        'DREMIO_USERNAME': Config.DREMIO_USERNAME or 'NOT SET',
-                        'DREMIO_PASSWORD': '***' if Config.DREMIO_PASSWORD else 'NOT SET',
-                        'DREMIO_PROJECT_ID': Config.DREMIO_PROJECT_ID or 'NOT SET'
-                    }
-                },
-                'suggestions': [
-                    'Copy .env.example to .env',
-                    'Fill in your Dremio Cloud credentials',
-                    'Make sure all required variables are set'
-                ]
-            }
+        # Step 1: Validate configuration (skip if using session-based auth)
+        if not skip_config_validation:
+            try:
+                Config.validate_dremio_config()
+                logger.info("✓ Configuration validation passed")
+            except ValueError as e:
+                error_msg = str(e)
+                logger.error(f"✗ Configuration validation failed: {error_msg}")
+                return {
+                    'status': 'error',
+                    'step': 'configuration',
+                    'message': error_msg,
+                    'details': {
+                        'current_config': {
+                            'DREMIO_CLOUD_URL': Config.DREMIO_CLOUD_URL or 'NOT SET',
+                            'DREMIO_USERNAME': Config.DREMIO_USERNAME or 'NOT SET',
+                            'DREMIO_PASSWORD': '***' if Config.DREMIO_PASSWORD else 'NOT SET',
+                            'DREMIO_PROJECT_ID': Config.DREMIO_PROJECT_ID or 'NOT SET'
+                        }
+                    },
+                    'suggestions': [
+                        'Copy .env.example to .env',
+                        'Fill in your Dremio Cloud credentials',
+                        'Make sure all required variables are set'
+                    ]
+                }
+        else:
+            logger.info("✓ Configuration validation skipped (using session-based auth)")
 
         # Step 2: Test authentication
         logger.info("Testing authentication...")

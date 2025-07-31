@@ -213,7 +213,7 @@ class DremioMultiDriverClient:
         pat = self._get_config_value("DREMIO_PAT")
 
         # Convert URL to Flight endpoint
-        if "api.dremio.cloud" in base_url:
+        if base_url and "api.dremio.cloud" in base_url:
             endpoint = "grpc+tls://data.dremio.cloud:443"
         else:
             endpoint = (

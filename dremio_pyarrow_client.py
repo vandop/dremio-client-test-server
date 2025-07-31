@@ -43,14 +43,14 @@ class DremioPyArrowClient:
             'https://app.eu.dremio.cloud': 'data.eu.dremio.cloud:443',
         }
         
-        base_clean = self.base_url.rstrip('/')
+        base_clean = self.base_url.rstrip('/') if self.base_url else ''
         if base_clean in url_mappings:
             endpoint = url_mappings[base_clean]
             logger.info(f"🔧 URL mapped to Flight endpoint: {base_clean} → {endpoint}")
             return endpoint
         
         # For custom domains, try to extract the host
-        if 'dremio.cloud' in self.base_url:
+        if self.base_url and 'dremio.cloud' in self.base_url:
             if 'api.' in self.base_url:
                 endpoint = self.base_url.replace('https://api.', 'data.').replace('http://api.', 'data.') + ':443'
             else:
@@ -263,8 +263,13 @@ class DremioPyArrowClient:
         else:
             return result
     
-    def test_connection(self) -> Dict[str, Any]:
-        """Test the connection with comprehensive diagnostics."""
+    def test_connection(self, skip_config_validation=False) -> Dict[str, Any]:
+        """
+        Test the connection with comprehensive diagnostics.
+
+        Args:
+            skip_config_validation: Ignored for PyArrow client (no config validation)
+        """
         logger.info("=== Starting Dremio PyArrow Flight Connection Test ===")
         
         # Test connection

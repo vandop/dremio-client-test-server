@@ -32,22 +32,26 @@ class DremioHybridClient:
         logger.info("  - PyArrow Flight SQL for data queries")
         logger.info("  - REST API for job information")
     
-    def test_connection(self) -> Dict[str, Any]:
+    def test_connection(self, skip_config_validation=False) -> Dict[str, Any]:
         """
         Test both Flight SQL and REST API connections.
-        
+
+        Args:
+            skip_config_validation: If True, skip environment variable validation
+                                  (useful for session-based authentication)
+
         Returns:
             Comprehensive connection test results
         """
         logger.info("=== Starting Hybrid Dremio Connection Test ===")
-        
+
         # Test Flight SQL connection
         logger.info("Testing PyArrow Flight SQL connection...")
-        flight_result = self.flight_client.test_connection()
-        
+        flight_result = self.flight_client.test_connection(skip_config_validation=skip_config_validation)
+
         # Test REST API connection
         logger.info("Testing REST API connection...")
-        rest_result = self.rest_client.test_connection()
+        rest_result = self.rest_client.test_connection(skip_config_validation=skip_config_validation)
         
         # Combine results
         both_successful = (
