@@ -98,63 +98,32 @@ def create_session_client():
     # Get session configuration
     config = get_session_config()
 
-    # The issue is that Config class reads environment variables at import time
-    # We need to reload the config module with new environment variables
-    import importlib
-    import contextlib
-
-    @contextlib.contextmanager
-    def temp_env_and_config_context(env_vars):
-        """Context manager to temporarily set environment variables and reload config."""
-        original_env = {}
-        try:
-            # Store original values
-            for key, value in env_vars.items():
-                original_env[key] = os.environ.get(key)
-                if value is not None:
-                    os.environ[key] = value
-                elif key in os.environ:
-                    del os.environ[key]
-
-            # Reload config module to pick up new environment variables
-            import config
-            importlib.reload(config)
-
-            yield
-        finally:
-            # Restore original environment variables
-            for key, original_value in original_env.items():
-                if original_value is not None:
-                    os.environ[key] = original_value
-                elif key in os.environ:
-                    del os.environ[key]
-
-            # Reload config again to restore original values
-            import config
-            importlib.reload(config)
-
-    # Prepare environment variables for session config
-    env_vars = {}
+    # Set environment variables permanently for this session
+    # (they will be overridden by the next session-based client creation)
     if config['dremio_url']:
-        env_vars['DREMIO_CLOUD_URL'] = config['dremio_url']
-        env_vars['DREMIO_URL'] = config['dremio_url']
+        os.environ['DREMIO_CLOUD_URL'] = config['dremio_url']
+        os.environ['DREMIO_URL'] = config['dremio_url']
     if config['project_id']:
-        env_vars['DREMIO_PROJECT_ID'] = config['project_id']
+        os.environ['DREMIO_PROJECT_ID'] = config['project_id']
     if config['pat']:
-        env_vars['DREMIO_PAT'] = config['pat']
+        os.environ['DREMIO_PAT'] = config['pat']
         # Clear username/password when using PAT
-        env_vars['DREMIO_USERNAME'] = ''
-        env_vars['DREMIO_PASSWORD'] = ''
+        os.environ.pop('DREMIO_USERNAME', None)
+        os.environ.pop('DREMIO_PASSWORD', None)
     elif config['username'] and config['password']:
-        env_vars['DREMIO_USERNAME'] = config['username']
-        env_vars['DREMIO_PASSWORD'] = config['password']
+        os.environ['DREMIO_USERNAME'] = config['username']
+        os.environ['DREMIO_PASSWORD'] = config['password']
         # Clear PAT when using username/password
-        env_vars['DREMIO_PAT'] = ''
+        os.environ.pop('DREMIO_PAT', None)
 
-    # Create client with temporary environment and config context
-    with temp_env_and_config_context(env_vars):
-        client = DremioHybridClient()
-        return client
+    # Reload config module to pick up new environment variables
+    import importlib
+    import config
+    importlib.reload(config)
+
+    # Create client with updated configuration
+    client = DremioHybridClient()
+    return client
 
 
 def get_current_config():
