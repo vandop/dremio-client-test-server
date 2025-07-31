@@ -89,6 +89,30 @@ def has_session_auth():
         return False
 
 
+def get_session_config_override():
+    """Get session-based configuration for multi-driver client."""
+    if not has_session_auth():
+        return {}
+
+    config = get_session_config()
+
+    # Convert session config to multi-driver client format
+    config_override = {}
+    if config['dremio_url']:
+        config_override['DREMIO_CLOUD_URL'] = config['dremio_url']
+        config_override['DREMIO_URL'] = config['dremio_url']
+    if config['project_id']:
+        config_override['DREMIO_PROJECT_ID'] = config['project_id']
+    if config['pat']:
+        config_override['DREMIO_PAT'] = config['pat']
+    if config['username']:
+        config_override['DREMIO_USERNAME'] = config['username']
+    if config['password']:
+        config_override['DREMIO_PASSWORD'] = config['password']
+
+    return config_override
+
+
 def create_session_client():
     """Create a Dremio client using session-based configuration."""
     if not has_session_auth():
@@ -514,8 +538,13 @@ def execute_query_multi_driver():
                 'message': 'At least one driver must be selected'
             }), 400
 
-        # Create multi-driver client with debug config if available
+        # Create multi-driver client with session-based config and debug config
         config_override = debug_config_manager.get_config_for_client()
+
+        # Add session-based configuration if available
+        session_config = get_session_config_override()
+        config_override.update(session_config)
+
         client = DremioMultiDriverClient(config_override=config_override)
 
         # Get available drivers
