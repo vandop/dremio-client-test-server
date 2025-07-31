@@ -138,13 +138,26 @@ class DremioMultiDriverClient:
             # Load environment to check for required credentials
             load_dotenv()
 
-            # Check for required configuration
+            # Check for required configuration in environment variables
             base_url = os.getenv("DREMIO_CLOUD_URL")
             pat = os.getenv("DREMIO_PAT")
 
+            # Also check for session-based credentials (for session-based auth)
+            try:
+                from flask import session, has_request_context
+                if has_request_context() and session:
+                    session_url = session.get('dremio_url')
+                    session_pat = session.get('pat')
+                    if session_url and session_pat:
+                        base_url = session_url
+                        pat = session_pat
+            except (ImportError, RuntimeError):
+                # Flask not available or no request context
+                pass
+
             if not base_url or not pat:
                 logger.info(
-                    "REST API requires DREMIO_CLOUD_URL and DREMIO_PAT in environment"
+                    "REST API requires DREMIO_CLOUD_URL and DREMIO_PAT in environment or session"
                 )
                 return False
 
@@ -215,13 +228,16 @@ class DremioMultiDriverClient:
         # Convert URL to Flight endpoint
         if base_url and "api.dremio.cloud" in base_url:
             endpoint = "grpc+tls://data.dremio.cloud:443"
-        else:
+        elif base_url:
             endpoint = (
                 base_url.replace("https://", "grpc+tls://").replace(
                     "http://", "grpc+tls://"
                 )
                 + ":443"
             )
+        else:
+            # Fallback if no base_url
+            endpoint = "grpc+tls://data.dremio.cloud:443"
 
         # Create connection
         if pat:
@@ -261,6 +277,8 @@ class DremioMultiDriverClient:
         pat = self._get_config_value("DREMIO_PAT")
 
         # Extract host from URL
+        if not base_url:
+            return {"success": False, "error": "No base URL provided"}
 
         host = base_url.replace("https://", "").replace("http://", "").split("/")[0]
         if "api.dremio.cloud" in host:
@@ -406,6 +424,9 @@ class DremioMultiDriverClient:
         project_id = self._get_config_value("DREMIO_PROJECT_ID")
 
         # Extract host from URL and configure for Dremio Cloud
+        if not base_url:
+            return {"success": False, "error": "No base URL provided"}
+
         host = base_url.replace("https://", "").replace("http://", "").split("/")[0]
 
         # JDBC URL and credentials for Arrow Flight SQL JDBC driver
@@ -628,6 +649,9 @@ class DremioMultiDriverClient:
         configs = []
 
         # Extract host from base URL
+        if not base_url:
+            return {"success": False, "error": "No base URL provided"}
+
         host = base_url.replace("https://", "").replace("http://", "").split("/")[0]
 
         if "dremio.cloud" in host:
