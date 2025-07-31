@@ -229,6 +229,22 @@ def clear_auth():
     return redirect('/auth')
 
 
+@app.route('/api/clear-session', methods=['POST'])
+def clear_session():
+    """API endpoint to clear session credentials."""
+    try:
+        session.clear()
+        return jsonify({
+            'status': 'success',
+            'message': 'Session credentials cleared successfully'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to clear session: {str(e)}'
+        }), 500
+
+
 
 
 
@@ -320,6 +336,42 @@ def configure_auth():
             'success': False,
             'error': f'Configuration error: {str(e)}'
         })
+
+
+@app.route('/api/session-info', methods=['GET'])
+def get_session_info():
+    """API endpoint to get current session authentication info."""
+    try:
+        if not has_session_auth():
+            return jsonify({
+                'status': 'no_session',
+                'message': 'No session-based authentication configured',
+                'session_active': False
+            })
+
+        config = get_session_config()
+
+        # Return session info with masked sensitive data
+        session_info = {
+            'status': 'active',
+            'session_active': True,
+            'dremio_type': config.get('dremio_type', 'unknown'),
+            'auth_method': config.get('auth_method', 'unknown'),
+            'dremio_url': config.get('dremio_url', 'not set'),
+            'project_id': config.get('project_id', 'not set'),
+            'username': config.get('username', 'not set') if config.get('username') else 'not set',
+            'pat': '***' + config.get('pat', '')[-4:] if config.get('pat') else 'not set',
+            'password': '***' if config.get('password') else 'not set',
+            'session_id': session.get('session_id', 'unknown')
+        }
+
+        return jsonify(session_info)
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get session info: {str(e)}'
+        }), 500
 
 
 @app.route('/api/test-connection')
