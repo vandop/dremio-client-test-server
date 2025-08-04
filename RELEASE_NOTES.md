@@ -8,7 +8,3 @@ This version includes critical fixes for JSON serialization of NaN values and en
 - ✅ Proper Dremio SQL syntax with reserved keyword handling
 - ✅ Comprehensive documentation for analytics queries
 - ✅ Fixed JavaScript escaping issues in query examples
-
-## Testing:
-All queries now work properly with the augment-daily-usage dataset containing 2,241 records across 140 users.
-

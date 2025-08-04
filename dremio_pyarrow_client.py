@@ -1,5 +1,6 @@
 """
-Dremio client using native PyArrow Flight (without ADBC) for better compatibility.
+Dremio client using native PyArrow Flight for SQL queries and REST API for jobs.
+Uses PyArrow Flight for direct SQL execution and REST API for job management.
 """
 import logging
 import pyarrow as pa
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class DremioPyArrowClient:
-    """Dremio client using native PyArrow Flight for direct SQL queries."""
+    """Dremio hybrid client using PyArrow Flight for SQL queries and REST API for jobs."""
     
     def __init__(self):
         """Initialize the Dremio PyArrow Flight client."""
@@ -22,14 +23,25 @@ class DremioPyArrowClient:
         self.password = Config.DREMIO_PASSWORD
         self.project_id = Config.DREMIO_PROJECT_ID
         self.pat = Config.DREMIO_PAT
-        
+
         # Flight connection details
         self.flight_endpoint = self._get_flight_endpoint()
         self.client = None
-        
+
+        # Initialize REST client for jobs API (lazy initialization)
+        self._rest_client = None
+
         logger.info(f"✓ Dremio PyArrow Flight client initialized")
         logger.info(f"Flight endpoint: {self.flight_endpoint}")
-    
+
+    @property
+    def rest_client(self):
+        """Get the REST client for jobs API (lazy initialization)."""
+        if self._rest_client is None:
+            from dremio_client import DremioClient
+            self._rest_client = DremioClient()
+        return self._rest_client
+
     def _get_flight_endpoint(self) -> str:
         """Get the correct Flight endpoint for Dremio Cloud."""
         if not self.base_url:
@@ -211,57 +223,37 @@ class DremioPyArrowClient:
     
     def get_jobs(self, limit: int = 100) -> Dict[str, Any]:
         """
-        Get jobs by querying the SYS.Jobs table.
-        
+        Get jobs using the REST API instead of querying SYS.Jobs table.
+
         Args:
             limit: Maximum number of jobs to retrieve
-            
+
         Returns:
             Dictionary with jobs data
         """
-        sql = f"""
-        SELECT 
-            job_id,
-            job_state,
-            query_type,
-            user_name,
-            submitted_ts,
-            attempt_started_ts,
-            final_state_ts,
-            query_text
-        FROM SYS.Jobs
-        ORDER BY submitted_ts DESC
-        LIMIT {limit}
-        """
-        
-        logger.info(f"Querying SYS.Jobs table with limit {limit}")
-        result = self.execute_query(sql)
-        
-        if result['success']:
-            # Process job data to match expected format
-            jobs = []
-            for job in result['data']:
-                processed_job = {
-                    'id': job.get('job_id'),
-                    'jobState': job.get('job_state'),
-                    'queryType': job.get('query_type'),
-                    'user': job.get('user_name'),
-                    'submittedTime': job.get('submitted_ts'),
-                    'startTime': job.get('attempt_started_ts'),
-                    'endTime': job.get('final_state_ts'),
-                    'queryText': job.get('query_text')
-                }
-                jobs.append(processed_job)
-            
+        logger.info(f"Getting jobs via REST API with limit {limit}")
+
+        try:
+            # Use the existing REST client
+            jobs_result = self.rest_client.get_jobs(limit=limit)
+
+            # Add query method information
+            if isinstance(jobs_result, dict):
+                jobs_result['query_method'] = 'rest_api'
+
+            return jobs_result
+
+        except Exception as e:
+            error_msg = f"Error getting jobs via REST API: {str(e)}"
+            logger.error(error_msg)
             return {
-                'success': True,
-                'jobs': jobs,
-                'count': len(jobs),
-                'message': f'Successfully retrieved {len(jobs)} jobs from SYS.Jobs',
-                'query_method': 'pyarrow_flight'
+                'success': False,
+                'jobs': [],
+                'error_type': 'unexpected_error',
+                'message': error_msg,
+                'details': f"Exception type: {type(e).__name__}",
+                'query_method': 'rest_api'
             }
-        else:
-            return result
     
     def test_connection(self, skip_config_validation=False) -> Dict[str, Any]:
         """
@@ -292,19 +284,20 @@ class DremioPyArrowClient:
                 'details': test_result
             }
         
-        # Test SYS.Jobs access
+        # Test REST API jobs access (no longer using SYS.Jobs table)
         jobs_result = self.get_jobs(limit=1)
-        
+
         logger.info("=== PyArrow Flight Connection Test Completed ===")
-        
+
         return {
             'status': 'success',
-            'message': 'Successfully connected to Dremio using PyArrow Flight',
+            'message': 'Successfully connected to Dremio using PyArrow Flight with REST API jobs',
             'details': {
                 'connection': connect_result,
                 'query_test': test_result['success'],
                 'jobs_access': jobs_result['success'],
                 'jobs_count': jobs_result.get('count', 0),
+                'jobs_method': jobs_result.get('query_method', 'rest_api'),
                 'flight_endpoint': self.flight_endpoint
             },
             'steps_completed': ['connection', 'query_test', 'jobs_test']
