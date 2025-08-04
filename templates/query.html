@@ -248,6 +248,15 @@
 
             <div class="query-interface">
                 <h3>✏️ SQL Query Editor</h3>
+                <textarea id="queryEditor" class="query-editor" placeholder="Enter your Dremio SQL query here...
+
+Examples:
+SELECT 1 &quot;test_value&quot;, LOCALTIMESTAMP &quot;current_time&quot;
+SHOW SCHEMAS
+SELECT USER &quot;current_user&quot;
+SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA LIMIT 10
+
+Note: Use double quotes for column aliases and reserved keywords in Dremio"></textarea>
 
                 <div class="query-controls">
                     <button onclick="executeQuery()" class="btn btn-primary">Execute Query (Single Driver)</button>
